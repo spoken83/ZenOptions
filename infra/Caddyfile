@@ -1,0 +1,19 @@
+# Caddyfile for zenoptions.com
+# Reference copy — active file is at: /opt/homebrew/etc/Caddyfile
+#
+# ZenOptions is a full-stack Node.js app (not static).
+# Caddy acts as a reverse proxy in front of the Express server on :5000.
+
+:8081 {
+    # Reverse proxy to the Node.js Express server
+    reverse_proxy localhost:5001
+
+    # Compress responses
+    encode gzip
+
+    # Cache static assets (JS/CSS/fonts built by Vite with content hashes)
+    @static {
+        path *.js *.css *.png *.jpg *.jpeg *.gif *.svg *.ico *.woff *.woff2
+    }
+    header @static Cache-Control "public, max-age=31536000, immutable"
+}

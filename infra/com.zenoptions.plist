@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.zenoptions</string>
+
+  <!-- Run the wrapper script that loads .env and starts Node on PORT 5001 -->
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>/Users/froisagent/ZenOptions/infra/start.sh</string>
+  </array>
+
+  <key>WorkingDirectory</key>
+  <string>/Users/froisagent/ZenOptions</string>
+
+  <!-- PORT=5001 so production doesn't conflict with the dev server on 5000.
+       NODE_ENV overrides whatever is in .env. -->
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>NODE_ENV</key>
+    <string>production</string>
+    <key>PORT</key>
+    <string>5001</string>
+  </dict>
+
+  <!-- Restart automatically if the process exits -->
+  <key>KeepAlive</key>
+  <true/>
+
+  <!-- Wait 5s before restarting to avoid rapid crash loops -->
+  <key>ThrottleInterval</key>
+  <integer>5</integer>
+
+  <key>RunAtLoad</key>
+  <true/>
+
+  <key>StandardOutPath</key>
+  <string>/Users/froisagent/Library/Logs/com.zenoptions.log</string>
+
+  <key>StandardErrorPath</key>
+  <string>/Users/froisagent/Library/Logs/com.zenoptions.err.log</string>
+</dict>
+</plist>

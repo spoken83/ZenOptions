@@ -1,0 +1,21 @@
+node_modules
+dist
+.DS_Store
+server/public
+vite.config.ts.*
+*.tar.gz
+.env
+.env.*
+!.env.example
+
+# One-time migration scripts with embedded credentials
+infra/migrate-prod-to-neon.mjs
+infra/clear-neon-prod.mjs
+
+# Migration artifacts
+backup_pre_saas_20251105_084757.sql
+backups/
+current_tables.txt
+pre_migration_row_counts.txt
+schema_before_migration.txt
+dev.pid
