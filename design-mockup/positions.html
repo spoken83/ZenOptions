@@ -1,0 +1,680 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Position Management - ZenOptions</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="css/positions.css">
+    <link rel="stylesheet" href="css/positions-table-compact.css">
+</head>
+<body>
+    <!-- Market Data Ticker -->
+    <div class="market-ticker">
+        <div class="ticker-scroll">
+            <span class="ticker-item positive">SPY +0.10%</span>
+            <span class="ticker-separator">|</span>
+            <span class="ticker-item negative">QQQ -0.32%</span>
+            <span class="ticker-separator">|</span>
+            <span class="ticker-item positive">DIA +0.12%</span>
+            <span class="ticker-separator">|</span>
+            <span class="ticker-item">VIX 19.08</span>
+            <span class="ticker-separator">|</span>
+            <span class="ticker-item positive">GLD +0.61%</span>
+        </div>
+    </div>
+
+    <!-- Header Navigation -->
+    <header class="main-header">
+        <div class="header-content">
+            <div class="logo-section">
+                <a href="index.html" class="logo">
+                    <i class="fas fa-home"></i>
+                    <span>Home</span>
+                </a>
+                <div class="nav-item">
+                    <i class="fas fa-list"></i>
+                    <span>Watchlist</span>
+                </div>
+                <a href="positions.html" class="nav-item active">
+                    <i class="fas fa-chart-line"></i>
+                    <span>Positions</span>
+                </a>
+                <a href="scanner.html" class="nav-item">
+                    <i class="fas fa-search"></i>
+                    <span>Scanner</span>
+                </a>
+                <a href="insights.html" class="nav-item">
+                    <i class="fas fa-lightbulb"></i>
+                    <span>Insights</span>
+                </a>
+                <div class="nav-item">
+                    <i class="fas fa-user"></i>
+                    <span>Account</span>
+                </div>
+            </div>
+            
+            <div class="auth-buttons">
+                <button class="btn-login">
+                    <i class="fas fa-sign-in-alt"></i> LOG IN
+                </button>
+                <button class="btn-signup">JOIN FOR FREE</button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <div class="positions-container">
+        <div class="container">
+            <!-- Page Header -->
+            <div class="page-header">
+                <div class="header-left">
+                    <h1>Option Positions Management</h1>
+                    <p class="update-time">Prices updated: Nov 14, 2025 4:10 AM ET</p>
+                </div>
+                <div class="header-actions">
+                    <select class="account-selector">
+                        <option>All Accounts</option>
+                        <option>Annabel's Trade</option>
+                        <option>G's Live (SD133709)</option>
+                    </select>
+                    <button class="btn-secondary">
+                        <i class="fas fa-sync-alt"></i> Sync from Tiger
+                    </button>
+                    <button class="btn-primary">
+                        <i class="fas fa-plus"></i> Position
+                    </button>
+                </div>
+            </div>
+
+            <!-- Portfolio ZenStatus Dashboard - Compact -->
+            <div class="zen-portfolio-dashboard-compact">
+                <div class="dashboard-row">
+                    <div class="dashboard-left">
+                        <h3><i class="fas fa-spa"></i> Portfolio Status</h3>
+                        <p class="zen-subtitle">Systematic guidance for every position</p>
+                    </div>
+                    <div class="dashboard-right">
+                        <div class="status-pill zen">
+                            <span class="pill-count">1</span>
+                            <span class="pill-label">On Track</span>
+                        </div>
+                        <div class="status-pill monitor">
+                            <span class="pill-count">2</span>
+                            <span class="pill-label">Monitor</span>
+                        </div>
+                        <div class="status-pill profit">
+                            <span class="pill-count">1</span>
+                            <span class="pill-label">Profit Ready</span>
+                        </div>
+                        <div class="status-pill action">
+                            <span class="pill-count">0</span>
+                            <span class="pill-label">Action</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Credit Options Positions -->
+            <div class="positions-section">
+                <div class="section-header">
+                    <div class="section-title">
+                        <h2>Credit Options (3)</h2>
+                        <span class="section-subtitle">Credit Spreads & Iron Condors</span>
+                    </div>
+                    <div class="section-actions">
+                        <button class="btn-export-table"><i class="fas fa-download"></i> Export</button>
+                    </div>
+                </div>
+
+                <div class="positions-table-wrapper">
+                    <table class="positions-table">
+                        <thead>
+                            <tr>
+                                <th>Symbol</th>
+                                <th>Strategy</th>
+                                <th>Entry Date</th>
+                                <th>DTE</th>
+                                <th>Expiry</th>
+                                <th>Qty</th>
+                                <th>Strikes</th>
+                                <th>Entry Credit</th>
+                                <th>Current Value</th>
+                                <th>Unrealized P/L</th>
+                                <th>P/L %</th>
+                                <th>ZenStatus</th>
+                                <th>Systematic Guidance</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <!-- Position 1: JPM - PROFIT READY -->
+                            <tr class="position-row profit-status" data-symbol="JPM-CS">
+                                <td class="symbol-cell">
+                                    <strong>JPM</strong>
+                                    <span class="qty-badge">1x</span>
+                                </td>
+                                <td>Call Spread</td>
+                                <td>30 Oct</td>
+                                <td>28</td>
+                                <td>12 Dec</td>
+                                <td>1</td>
+                                <td class="strikes-cell">
+                                    <span class="strike-short">325</span> / <span class="strike-long">330</span>
+                                </td>
+                                <td class="credit-cell">$2.61</td>
+                                <td>$1.44</td>
+                                <td class="profit-cell positive">
+                                    <strong>+$117</strong>
+                                </td>
+                                <td class="pct-cell positive">+44.8%</td>
+                                <td>
+                                    <div class="status-badge-compact profit">
+                                        🎯 PROFIT
+                                    </div>
+                                </td>
+                                <td class="guidance-cell">
+                                    <div class="guidance-text">Profit target reached (44.8%). Consider taking profits per systematic rule.</div>
+                                    <button class="btn-why" onclick="toggleGuidance('JPM-CS')">
+                                        <i class="fas fa-info-circle"></i> Why?
+                                    </button>
+                                </td>
+                            </tr>
+                            
+                            <!-- Guidance Panel for JPM -->
+                            <tr class="guidance-panel" id="guidance-JPM-CS" style="display: none;">
+                                <td colspan="13">
+                                    <div class="zen-guidance-detail">
+                                        <div class="guidance-header">
+                                            <h4><i class="fas fa-spa"></i> ZenGuidance: JPM Call Spread</h4>
+                                            <div class="status-badge profit">PROFIT READY</div>
+                                        </div>
+                                        
+                                        <div class="guidance-sections">
+                                            <div class="current-situation">
+                                                <h5><i class="fas fa-chart-bar"></i> Current Situation</h5>
+                                                <p>Position showing +$117 gain (+44.8%) with 28 DTE remaining. Current price $309.48 well below short strike $325.</p>
+                                            </div>
+                                            
+                                            <div class="systematic-rule">
+                                                <h5><i class="fas fa-book"></i> Our Systematic Rule</h5>
+                                                <p><strong>"Close credit spreads at 50-70% of maximum profit."</strong></p>
+                                                <p>You've captured 44.8% of max profit. This is near our profit-taking threshold. With 28 DTE remaining, theta decay advantage is declining.</p>
+                                            </div>
+                                            
+                                            <div class="zen-action">
+                                                <h5><i class="fas fa-bullseye"></i> Zen Action</h5>
+                                                <p><strong>Consider taking profits now</strong> or wait for 50% threshold (~$130 profit). The systematic approach is to lock in gains before gamma risk increases below 21 DTE.</p>
+                                            </div>
+                                            
+                                            <div class="next-checkpoint">
+                                                <h5><i class="fas fa-clock"></i> Next Decision Points</h5>
+                                                <ul>
+                                                    <li>If profit reaches 50% ($130) → Strong systematic exit signal</li>
+                                                    <li>21 DTE (Nov 21) → Mandatory exit regardless of P/L</li>
+                                                    <li>If price rallies toward $325 → Close immediately</li>
+                                                </ul>
+                                            </div>
+                                            
+                                            <div class="zen-reminder">
+                                                <div class="reminder-box">
+                                                    <p><em>"Systematic profit-taking protects gains. You don't need maximum profit - you need consistent, disciplined wins."</em></p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        
+                                        <div class="guidance-actions">
+                                            <button class="btn-primary">Close Position</button>
+                                            <button class="btn-secondary">Set 50% Profit Alert</button>
+                                            <button class="btn-outline">Learn This Rule</button>
+                                            <button class="btn-text" onclick="toggleGuidance('JPM')">Close Panel</button>
+                                        </div>
+                                    </div>
+                                </td>
+                            </tr>
+
+                            <!-- Position 2: UNH PUT Spread - MONITOR -->
+                            <tr class="position-row monitor-status" data-symbol="UNH-PS">
+                                <td class="symbol-cell">
+                                    <strong>UNH</strong>
+                                    <span class="qty-badge">1x</span>
+                                </td>
+                                <td>Put Spread</td>
+                                <td>01 Nov</td>
+                                <td>35</td>
+                                <td>19 Dec</td>
+                                <td>1</td>
+                                <td class="strikes-cell">
+                                    <span class="strike-short">560</span> / <span class="strike-long">555</span>
+                                </td>
+                                <td class="credit-cell">$1.15</td>
+                                <td>$2.30</td>
+                                <td class="profit-cell negative">
+                                    <strong>-$115</strong>
+                                </td>
+                                <td class="pct-cell negative">-100%</td>
+                                <td>
+                                    <div class="status-badge-compact monitor">
+                                        👁️ MONITOR
+                                    </div>
+                                </td>
+                                <td class="guidance-cell">
+                                    <div class="guidance-text">Large loss but short strike intact. Hold per systematic rule - exit at 21 DTE.</div>
+                                    <button class="btn-why" onclick="toggleGuidance('UNH-PS')">
+                                        <i class="fas fa-info-circle"></i> Why?
+                                    </button>
+                                </td>
+                            </tr>
+                            
+                            <!-- Guidance Panel for UNH -->
+                            <tr class="guidance-panel" id="guidance-UNH-PS" style="display: none;">
+                                <td colspan="13">
+                                    <div class="zen-guidance-detail-compact">
+                                        <div class="guidance-header-compact">
+                                            <div>
+                                                <h4><i class="fas fa-spa"></i> ZenGuidance: UNH Put Spread</h4>
+                                                <p class="guidance-subtitle">Systematic reasoning for this position</p>
+                                            </div>
+                                            <button class="btn-close-guidance" onclick="toggleGuidance('UNH-PS')">
+                                                <i class="fas fa-times"></i>
+                                            </button>
+                                        </div>
+                                        
+                                        <div class="guidance-grid">
+                                            <div class="guidance-card">
+                                                <div class="card-icon situation"><i class="fas fa-chart-line"></i></div>
+                                                <h5>Current Situation</h5>
+                                                <p>UNH PUT spread (560/555) is down <strong>-100%</strong> (-$115). Stock at <strong>$332.52</strong>, which is <strong>$227.48 below</strong> your short strike of $560.</p>
+                                                <p><strong>35 days until expiration</strong> (Dec 19). With meaningful time remaining, systematic rules guide us to hold and monitor.</p>
+                                            </div>
+                                            
+                                            <div class="guidance-card">
+                                                <div class="card-icon rule"><i class="fas fa-book"></i></div>
+                                                <h5>Why MONITOR?</h5>
+                                                <p><strong>Key Rule:</strong> Don't close credit spreads with &gt;21 DTE unless short strike breached AND loss exceeds max risk.</p>
+                                                <ul class="compact-checks">
+                                                    <li>✅ 35 DTE (above 21-day threshold)</li>
+                                                    <li>✅ Short $560 safe (price $332.52)</li>
+                                                    <li>✅ -100% equals max credit risked</li>
+                                                </ul>
+                                            </div>
+                                            
+                                            <div class="guidance-card">
+                                                <div class="card-icon action"><i class="fas fa-bullseye"></i></div>
+                                                <h5>Decision Points</h5>
+                                                <p><strong>No action now.</strong> Continue monitoring for:</p>
+                                                <ul class="compact-checks">
+                                                    <li>Price drops below $560 (short strike breach)</li>
+                                                    <li>21 DTE (Nov 21) → Systematic exit</li>
+                                                    <li>Loss exceeds -100% → Close immediately</li>
+                                                </ul>
+                                                <div class="zen-quote">"Systematic losses are part of disciplined trading. Trust the process."</div>
+                                            </div>
+                                        </div>
+                                        
+                                        <div class="guidance-actions-compact">
+                                            <button class="btn-secondary"><i class="fas fa-bell"></i> Set Strike Alert</button>
+                                            <button class="btn-secondary"><i class="fas fa-clock"></i> Set DTE Alert</button>
+                                            <button class="btn-outline"><i class="fas fa-book-open"></i> Learn Rule</button>
+                                        </div>
+                                    </div>
+                                </td>
+                            </tr>
+
+                            <!-- Position 3: UNH PUT Spread #2 - ZEN -->
+                            <tr class="position-row zen-status" data-symbol="UNH-PS2">
+                                <td class="symbol-cell">
+                                    <strong>UNH</strong>
+                                    <span class="qty-badge">2x</span>
+                                </td>
+                                <td>Put Spread</td>
+                                <td>31 Oct</td>
+                                <td>28</td>
+                                <td>12 Dec</td>
+                                <td>2</td>
+                                <td class="strikes-cell">
+                                    <span class="strike-short">320</span> / <span class="strike-long">325</span>
+                                </td>
+                                <td class="credit-cell">$1.57</td>
+                                <td>$2.39</td>
+                                <td class="profit-cell positive">
+                                    <strong>+$4.41</strong>
+                                </td>
+                                <td class="pct-cell positive">+1.6%</td>
+                                <td>
+                                    <div class="status-badge-compact zen">
+                                        ✅ ZEN
+                                    </div>
+                                </td>
+                                <td class="guidance-cell">
+                                    <div class="guidance-text">On track. Hold until 50% profit or 21 DTE per systematic plan.</div>
+                                    <button class="btn-why" onclick="toggleGuidance('UNH-PS2')">
+                                        <i class="fas fa-info-circle"></i> Why?
+                                    </button>
+                                </td>
+                            </tr>
+                            
+                            <!-- Guidance Panel for UNH PUT Spread #2 -->
+                            <tr class="guidance-panel" id="guidance-UNH-PS2" style="display: none;">
+                                <td colspan="13">
+                                    <div class="zen-guidance-detail-compact">
+                                        <div class="guidance-header-compact">
+                                            <div>
+                                                <h4><i class="fas fa-spa"></i> ZenGuidance: UNH Put Spread #2</h4>
+                                                <p class="guidance-subtitle">Systematic reasoning for this position</p>
+                                            </div>
+                                            <button class="btn-close-guidance" onclick="toggleGuidance('UNH-PS2')">
+                                                <i class="fas fa-times"></i>
+                                            </button>
+                                        </div>
+                                        
+                                        <div class="guidance-grid">
+                                            <div class="guidance-card">
+                                                <div class="card-icon situation"><i class="fas fa-chart-line"></i></div>
+                                                <h5>Current Situation</h5>
+                                                <p>UNH PUT spread (320/325) showing slight profit of <strong>+1.6%</strong> (+$4.41). Stock at <strong>$332.52</strong>, giving a <strong>$12.52 buffer</strong> above your short strike of $320.</p>
+                                                <p><strong>28 days until expiration</strong> (Dec 12). Position is on track with time and distance working in your favor.</p>
+                                            </div>
+                                            
+                                            <div class="guidance-card">
+                                                <div class="card-icon rule"><i class="fas fa-book"></i></div>
+                                                <h5>Why ZEN Status?</h5>
+                                                <p><strong>Key Rule:</strong> Hold credit spreads until 50% profit target OR 21 DTE, whichever comes first.</p>
+                                                <ul class="compact-checks">
+                                                    <li>✅ 28 DTE (above 21-day threshold)</li>
+                                                    <li>✅ Short $320 safe (price $332.52)</li>
+                                                    <li>⏳ Profit +1.6% (target: 50%)</li>
+                                                </ul>
+                                                <p>Position needs more time to reach profit target. Continue holding systematically.</p>
+                                            </div>
+                                            
+                                            <div class="guidance-card">
+                                                <div class="card-icon action"><i class="fas fa-bullseye"></i></div>
+                                                <h5>Decision Points</h5>
+                                                <p><strong>No action now.</strong> Continue holding for:</p>
+                                                <ul class="compact-checks">
+                                                    <li>Profit reaches 50% → Take profits</li>
+                                                    <li>21 DTE (Nov 21) → Exit systematically</li>
+                                                    <li>Price drops below $320 → Reassess</li>
+                                                </ul>
+                                                <div class="zen-quote">"Let time decay work in your favor. Trust the systematic plan."</div>
+                                            </div>
+                                        </div>
+                                        
+                                        <div class="guidance-actions-compact">
+                                            <button class="btn-secondary"><i class="fas fa-bullseye"></i> Set 50% Profit Alert</button>
+                                            <button class="btn-secondary"><i class="fas fa-clock"></i> Set 21 DTE Alert</button>
+                                            <button class="btn-outline"><i class="fas fa-book-open"></i> Learn Rule</button>
+                                        </div>
+                                    </div>
+                                </td>
+                            </tr>
+
+                            <!-- Position 4: JPM CALL Spread #2 - MONITOR -->
+                            <tr class="position-row monitor-status" data-symbol="JPM-CS2">
+                                <td class="symbol-cell">
+                                    <strong>JPM</strong>
+                                    <span class="qty-badge">1x</span>
+                                </td>
+                                <td>Call Spread</td>
+                                <td>30 Oct</td>
+                                <td>28</td>
+                                <td>12 Dec</td>
+                                <td>1</td>
+                                <td class="strikes-cell">
+                                    <span class="strike-short">325</span> / <span class="strike-long">335</span>
+                                </td>
+                                <td class="credit-cell">$2.40</td>
+                                <td>$3.80</td>
+                                <td class="profit-cell negative">
+                                    <strong>-$140</strong>
+                                </td>
+                                <td class="pct-cell negative">-58.2%</td>
+                                <td>
+                                    <div class="status-badge-compact monitor">
+                                        👁️ MONITOR
+                                    </div>
+                                </td>
+                                <td class="guidance-cell">
+                                    <div class="guidance-text">Moderate loss (-58.2%). Short strike safe. Hold per systematic rule.</div>
+                                    <button class="btn-why" onclick="toggleGuidance('JPM-CS2')">
+                                        <i class="fas fa-info-circle"></i> Why Hold?
+                                    </button>
+                                </td>
+                            </tr>
+                            
+                            <!-- Guidance Panel for JPM CALL Spread #2 -->
+                            <tr class="guidance-panel" id="guidance-JPM-CS2" style="display: none;">
+                                <td colspan="13">
+                                    <div class="zen-guidance-detail-compact">
+                                        <div class="guidance-header-compact">
+                                            <div>
+                                                <h4><i class="fas fa-spa"></i> ZenGuidance: JPM Call Spread #2</h4>
+                                                <p class="guidance-subtitle">Systematic reasoning for this position</p>
+                                            </div>
+                                            <button class="btn-close-guidance" onclick="toggleGuidance('JPM-CS2')">
+                                                <i class="fas fa-times"></i>
+                                            </button>
+                                        </div>
+                                        
+                                        <div class="guidance-grid">
+                                            <div class="guidance-card">
+                                                <div class="card-icon situation"><i class="fas fa-chart-line"></i></div>
+                                                <h5>Current Situation</h5>
+                                                <p>JPM CALL spread (325/335) showing loss of <strong>-58.2%</strong> (-$140). Stock at <strong>$309.48</strong>, giving a <strong>$15.52 buffer</strong> below your short strike of $325.</p>
+                                                <p><strong>28 days until expiration</strong> (Dec 12). Moderate loss but short strike remains intact with meaningful time remaining.</p>
+                                            </div>
+                                            
+                                            <div class="guidance-card">
+                                                <div class="card-icon rule"><i class="fas fa-book"></i></div>
+                                                <h5>Why MONITOR?</h5>
+                                                <p><strong>Key Rule:</strong> Hold positions with &gt;50% loss if short strikes aren't breached and &gt;21 DTE remains.</p>
+                                                <ul class="compact-checks">
+                                                    <li>✅ 28 DTE (above 21-day threshold)</li>
+                                                    <li>✅ Short $325 safe (price $309.48)</li>
+                                                    <li>⚠️ Loss -58.2% (monitor closely)</li>
+                                                </ul>
+                                                <p>Short strike has $15.52 buffer. Systematic approach allows recovery potential with time.</p>
+                                            </div>
+                                            
+                                            <div class="guidance-card">
+                                                <div class="card-icon action"><i class="fas fa-bullseye"></i></div>
+                                                <h5>Decision Points</h5>
+                                                <p><strong>Continue monitoring.</strong> Watch for:</p>
+                                                <ul class="compact-checks">
+                                                    <li>Price rises above $325 (short strike breach) → Consider closing</li>
+                                                    <li>21 DTE (Nov 21) → Exit systematically</li>
+                                                    <li>Loss exceeds -100% → Close to limit max loss</li>
+                                                </ul>
+                                                <div class="zen-quote">"Short strike intact means recovery is possible. Trust systematic rules."</div>
+                                            </div>
+                                        </div>
+                                        
+                                        <div class="guidance-actions-compact">
+                                            <button class="btn-secondary"><i class="fas fa-bell"></i> Set $325 Breach Alert</button>
+                                            <button class="btn-secondary"><i class="fas fa-clock"></i> Set 21 DTE Alert</button>
+                                            <button class="btn-outline"><i class="fas fa-book-open"></i> Learn Rule</button>
+                                        </div>
+                                    </div>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Debit Options Section -->
+            <div class="positions-section">
+                <div class="section-header">
+                    <div class="section-title">
+                        <h2><i class="fas fa-arrow-trend-up"></i> Debit Options (1)</h2>
+                        <p class="section-description">LEAPS and long-term directional plays</p>
+                    </div>
+                    <button class="btn-export-table">
+                        <i class="fas fa-download"></i> Export Table
+                    </button>
+                </div>
+
+                <div class="table-wrapper">
+                    <table class="positions-table">
+                        <thead>
+                            <tr>
+                                <th>Symbol</th>
+                                <th>Type</th>
+                                <th>Opened</th>
+                                <th>DTE</th>
+                                <th>Expiry</th>
+                                <th>Qty</th>
+                                <th>Strike</th>
+                                <th>Debit</th>
+                                <th>Current</th>
+                                <th>P/L</th>
+                                <th>P/L %</th>
+                                <th>ZenStatus</th>
+                                <th>Systematic Guidance</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <!-- Position 1: XLV LEAPS Call - ZEN -->
+                            <tr class="position-row zen-status" data-symbol="XLV-LEAPS">
+                                <td class="symbol-cell">
+                                    <strong>XLV</strong>
+                                    <span class="qty-badge">5x</span>
+                                </td>
+                                <td>LEAPS Call</td>
+                                <td>15 Oct</td>
+                                <td>421</td>
+                                <td>19 Dec 2025</td>
+                                <td>5</td>
+                                <td class="strikes-cell">
+                                    <span class="strike-long">155</span>
+                                </td>
+                                <td class="debit-cell">$8.50</td>
+                                <td>$11.20</td>
+                                <td class="profit-cell positive">
+                                    <strong>+$1,350</strong>
+                                </td>
+                                <td class="pct-cell positive">+31.8%</td>
+                                <td>
+                                    <div class="status-badge-compact zen">
+                                        ✅ ZEN
+                                    </div>
+                                </td>
+                                <td class="guidance-cell">
+                                    <div class="guidance-text">Strong profit on healthcare LEAPS. Consider partial profit-taking at 50%+ gains while keeping core position.</div>
+                                    <button class="btn-why" onclick="toggleGuidance('XLV-LEAPS')">
+                                        <i class="fas fa-info-circle"></i> Why?
+                                    </button>
+                                </td>
+                            </tr>
+                            
+                            <!-- Guidance Panel for XLV LEAPS -->
+                            <tr class="guidance-panel" id="guidance-XLV-LEAPS" style="display: none;">
+                                <td colspan="13">
+                                    <div class="zen-guidance-detail-compact">
+                                        <div class="guidance-header-compact">
+                                            <div>
+                                                <h4><i class="fas fa-spa"></i> ZenGuidance: XLV LEAPS Call</h4>
+                                                <p class="guidance-subtitle">Systematic reasoning for this position</p>
+                                            </div>
+                                            <button class="btn-close-guidance" onclick="toggleGuidance('XLV-LEAPS')">
+                                                <i class="fas fa-times"></i>
+                                            </button>
+                                        </div>
+                                        
+                                        <div class="guidance-grid">
+                                            <div class="guidance-card">
+                                                <div class="card-icon situation"><i class="fas fa-chart-line"></i></div>
+                                                <h5>Current Situation</h5>
+                                                <p>XLV LEAPS Call ($155 strike) showing strong profit of <strong>+31.8%</strong> (+$1,350) with <strong>421 days until expiration</strong> (Dec 19, 2025).</p>
+                                                <p>Position has significant time value remaining. Healthcare sector showing strength, making this an ideal LEAPS position for long-term holding.</p>
+                                            </div>
+                                            
+                                            <div class="guidance-card">
+                                                <div class="card-icon rule"><i class="fas fa-book"></i></div>
+                                                <h5>Why ZEN Status?</h5>
+                                                <p><strong>Key Rule for LEAPS:</strong> Hold long-term directional positions with &gt;365 DTE unless profit exceeds 100% or thesis changes.</p>
+                                                <ul class="compact-checks">
+                                                    <li>✅ 421 DTE (strong time value)</li>
+                                                    <li>✅ Profit +31.8% (healthy unrealized gain)</li>
+                                                    <li>✅ Healthcare thesis intact</li>
+                                                </ul>
+                                                <p>Consider taking partial profits (sell 2 of 5 contracts) to lock in gains while keeping exposure.</p>
+                                            </div>
+                                            
+                                            <div class="guidance-card">
+                                                <div class="card-icon action"><i class="fas fa-bullseye"></i></div>
+                                                <h5>Decision Points</h5>
+                                                <p><strong>Consider these actions:</strong></p>
+                                                <ul class="compact-checks">
+                                                    <li>Profit reaches 50% → Take partial profits (2 of 5 contracts)</li>
+                                                    <li>Profit reaches 100% → Trim to 2 contracts, let rest run</li>
+                                                    <li>Healthcare sector weakens → Reassess thesis</li>
+                                                    <li>180 DTE → Review position sizing</li>
+                                                </ul>
+                                                <div class="zen-quote">"LEAPS are for patience. Let time and trends work in your favor."</div>
+                                            </div>
+                                        </div>
+                                        
+                                        <div class="guidance-actions-compact">
+                                            <button class="btn-secondary"><i class="fas fa-bullseye"></i> Set 50% Profit Alert</button>
+                                            <button class="btn-secondary"><i class="fas fa-chart-line"></i> View XLV Chart</button>
+                                            <button class="btn-outline"><i class="fas fa-book-open"></i> Learn LEAPS Strategy</button>
+                                        </div>
+                                    </div>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="main-footer">
+        <div class="container">
+            <div class="footer-content">
+                <div class="footer-brand">
+                    <h3>ZenOptions</h3>
+                    <p>Smarter Options Trading</p>
+                </div>
+                
+                <div class="footer-links">
+                    <div class="link-column">
+                        <h4>Platform</h4>
+                        <a href="#scanner">Scanner</a>
+                        <a href="positions.html">Position Manager</a>
+                        <a href="insights.html">Market Insights</a>
+                        <a href="#methodology">Methodology</a>
+                    </div>
+                    <div class="link-column">
+                        <h4>Resources</h4>
+                        <a href="#learn">Learn</a>
+                        <a href="#docs">Documentation</a>
+                        <a href="#support">Support</a>
+                        <a href="#status">Status</a>
+                    </div>
+                    <div class="link-column">
+                        <h4>Company</h4>
+                        <a href="#about">About</a>
+                        <a href="#privacy">Privacy</a>
+                        <a href="#terms">Terms</a>
+                        <a href="#contact">Contact</a>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="footer-legal">
+                <p><strong>Risk Disclosure:</strong> Options involve substantial risk and are not suitable for all investors. ZenOptions provides educational analysis, not investment advice. Past performance does not guarantee future results.</p>
+                <p>© 2024 ZenOptions. All rights reserved.</p>
+            </div>
+        </div>
+    </footer>
+
+    <script src="js/positions.js"></script>
+</body>
+</html>

@@ -1,0 +1,679 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ZenOptions - Smarter Options Trading</title>
+    <meta name="description" content="Systematic options trading platform with automated scanning, active position management, and real-time market insights.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <!-- Market Data Ticker (Top Strip) -->
+    <div class="market-ticker">
+        <div class="ticker-scroll">
+            <span class="ticker-item positive">SPY +0.10%</span>
+            <span class="ticker-separator">|</span>
+            <span class="ticker-item negative">QQQ -0.32%</span>
+            <span class="ticker-separator">|</span>
+            <span class="ticker-item positive">DIA +0.12%</span>
+            <span class="ticker-separator">|</span>
+            <span class="ticker-item">VIX 19.08</span>
+            <span class="ticker-separator">|</span>
+            <span class="ticker-item positive">GLD +0.61%</span>
+            <span class="ticker-separator">|</span>
+            <span class="ticker-item positive">IWM +0.52%</span>
+            <span class="ticker-separator">|</span>
+            <span class="ticker-item negative">XLK -0.35%</span>
+            <span class="ticker-separator">|</span>
+            <span class="ticker-item positive">XLV +0.14%</span>
+            <span class="ticker-separator">|</span>
+            <span class="ticker-item positive">XLF +0.71%</span>
+        </div>
+    </div>
+
+    <!-- Header Navigation -->
+    <header class="main-header">
+        <div class="header-content">
+            <div class="logo-section">
+                <a href="index.html" class="logo">
+                    <i class="fas fa-home"></i>
+                    <span>Home</span>
+                </a>
+                <div class="nav-item">
+                    <i class="fas fa-list"></i>
+                    <span>Watchlist</span>
+                </div>
+                <a href="positions.html" class="nav-item">
+                    <i class="fas fa-chart-line"></i>
+                    <span>Positions</span>
+                </a>
+                <a href="scanner.html" class="nav-item">
+                    <i class="fas fa-search"></i>
+                    <span>Scanner</span>
+                </a>
+                <a href="insights.html" class="nav-item">
+                    <i class="fas fa-lightbulb"></i>
+                    <span>Insights</span>
+                </a>
+                <div class="nav-item">
+                    <i class="fas fa-user"></i>
+                    <span>Account</span>
+                </div>
+            </div>            
+            <div class="auth-buttons">
+                <button class="btn-login">
+                    <i class="fas fa-sign-in-alt"></i> LOG IN
+                </button>
+                <button class="btn-signup">JOIN FOR FREE</button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Hero Section - Welcome Banner -->
+    <section class="hero-welcome">
+        <div class="container">
+            <div class="welcome-content">
+                <h1>Welcome to Zen Options</h1>
+                <p class="hero-subtitle">Track your options positions, get automated alerts, and never miss a trading opportunity. Sign in to unlock:</p>
+                
+                <div class="welcome-features">
+                    <div class="welcome-feature">
+                        <i class="fas fa-shield-alt"></i>
+                        <div>
+                            <h3>Active Position Management</h3>
+                            <p>Track, monitor and get actionable alerts to manage your risk</p>
+                        </div>
+                    </div>
+                    <div class="welcome-feature">
+                        <i class="fas fa-bell"></i>
+                        <div>
+                            <h3>Smart Alerts</h3>
+                            <p>Take-profit, stop-loss & DTE notifications</p>
+                        </div>
+                    </div>
+                    <div class="welcome-feature">
+                        <i class="fas fa-search-dollar"></i>
+                        <div>
+                            <h3>Custom Scans</h3>
+                            <p>Automated daily scans with technical indicators</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Market Snapshot Section -->
+    <section class="market-snapshot">
+        <div class="container">
+            <h2>TODAY'S MARKET CONDITIONS</h2>
+            
+            <div class="snapshot-grid">
+                <!-- Market Volatility Card (Simplified) -->
+                <div class="snapshot-card volatility-card">
+                    <div class="card-header-simple">
+                        <h3>Market Volatility</h3>
+                        <div class="status-badge normal">
+                            <span>NORMAL</span>
+                        </div>
+                    </div>
+                    
+                    <div class="vix-data-display">
+                        <div class="vix-primary">
+                            <span class="vix-label">VIX</span>
+                            <span class="vix-number">19.08</span>
+                            <span class="vix-status">Normal Range</span>
+                        </div>
+                        <div class="vix-secondary">
+                            <span class="vvix-label">VVIX</span>
+                            <span class="vvix-number">103.60</span>
+                            <span class="vvix-status">Elevated ⚠️</span>
+                        </div>
+                    </div>
+                    
+                    <div class="volatility-meter">
+                        <div class="meter-bar">
+                            <div class="meter-fill normal" style="width: 40%;"></div>
+                        </div>
+                        <div class="meter-labels">
+                            <span>Low (&lt;15)</span>
+                            <span>Normal (15-25)</span>
+                            <span>High (&gt;25)</span>
+                        </div>
+                    </div>
+                    
+                    <div class="card-content">
+                        <p class="market-summary"><strong>What the data tells us:</strong> VIX at 19.08 indicates calm market conditions, but VVIX at 103.60 shows institutions are buying extra protection.</p>
+                        
+                        <div class="alert-box warning">
+                            <i class="fas fa-exclamation-triangle"></i>
+                            <div>
+                                <h4>⚠️ Risk Alert</h4>
+                                <p>When VVIX is elevated while VIX is normal, volatility can spike quickly. <strong>Reduce position sizes to 70% of normal</strong> as a precaution.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Market Environment Card -->
+                <div class="snapshot-card environment-card">
+                    <h3>Trading Environment</h3>
+                    <div class="environment-badge defensive">
+                        <i class="fas fa-shield-alt"></i>
+                        <span>CAUTIOUS MODE</span>
+                    </div>
+                    
+                    <div class="environment-summary">
+                        <p><strong>What's happening:</strong> Defensive sectors (XLV +0.14%, XLP) are outperforming while growth sectors lag (XLK -0.35%). This rotation pattern typically signals risk-off sentiment.</p>
+                    </div>
+                    
+                    <div class="trading-guidance">
+                        <h4>💡 What This Means For You:</h4>
+                        <ul class="guidance-list">
+                            <li>✅ Credit spreads: Good conditions, but size at 70% of normal</li>
+                            <li>✅ Iron condors: VIX &lt;20 favors range-bound strategies</li>
+                            <li>✅ Focus on defensive tickers: XLV, XLP, quality names</li>
+                            <li>⚠️ Position sizing: Use 70% of your typical size</li>
+                            <li>❌ Avoid aggressive bullish plays in growth sectors</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- VIX Scenario Planning -->
+            <div class="vix-scenario-planning">
+                <h3><i class="fas fa-route"></i> Systematic Scenario Planning</h3>
+                <p class="scenario-intro">Our platform adjusts recommendations based on VIX movements. Here's your action plan:</p>
+                
+                <div class="scenario-cards-grid">
+                    <div class="scenario-planning-card current">
+                        <div class="scenario-status">
+                            <i class="fas fa-check-circle"></i>
+                            <span class="scenario-range">Current (VIX 15-20)</span>
+                        </div>
+                        <h4>Normal Volatility Mode</h4>
+                        <ul class="scenario-actions">
+                            <li>✅ Continue systematic approach</li>
+                            <li>✅ All strategies acceptable</li>
+                            <li>✅ Standard position sizing (with 70% adjustment for VVIX)</li>
+                        </ul>
+                    </div>
+                    
+                    <div class="scenario-planning-card warning">
+                        <div class="scenario-status">
+                            <i class="fas fa-exclamation-triangle"></i>
+                            <span class="scenario-range">If VIX Breaks > 20</span>
+                        </div>
+                        <h4>Elevated Volatility Mode</h4>
+                        <ul class="scenario-actions">
+                            <li>⚠️ Close 50% of iron condor positions</li>
+                            <li>⚠️ Tighten stop-loss management</li>
+                            <li>⚠️ Reduce new position sizes to 50%</li>
+                            <li>⚠️ Focus on credit spreads over ICs</li>
+                        </ul>
+                    </div>
+                    
+                    <div class="scenario-planning-card danger">
+                        <div class="scenario-status">
+                            <i class="fas fa-shield-alt"></i>
+                            <span class="scenario-range">If VIX Spikes > 25</span>
+                        </div>
+                        <h4>High Volatility - Defensive Mode</h4>
+                        <ul class="scenario-actions">
+                            <li>🛑 Close all iron condor positions</li>
+                            <li>🛑 Halt new entries temporarily</li>
+                            <li>✅ Focus on protective strategies only</li>
+                            <li>✅ Wait for VIX to stabilize below 20</li>
+                        </ul>
+                    </div>
+                </div>
+                
+                <div class="scenario-cta">
+                    <p class="scenario-note">These rules are built into our alert system - you'll be notified when action is needed.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Premiums Assessment Section -->
+    <section class="premiums-section">
+        <div class="container">
+            <h2>PREMIUMS</h2>
+            
+            <div class="premiums-grid">
+                <!-- Credit Spreads -->
+                <div class="premium-card">
+                    <div class="card-header">
+                        <h3>CREDIT SPREADS</h3>
+                        <div class="rating excellent">
+                            <i class="fas fa-check-circle"></i>
+                            <i class="fas fa-check-circle"></i>
+                            <i class="fas fa-check-circle"></i>
+                            <span>EXCELLENT</span>
+                        </div>
+                    </div>
+                    <ul class="premium-details">
+                        <li><i class="fas fa-check"></i> VIX 19.08: Fair premium for collection</li>
+                        <li><i class="fas fa-check"></i> Probability setups work in this environment</li>
+                        <li><i class="fas fa-check"></i> VVIX elevated: Reduce position sizes to 70%</li>
+                    </ul>
+                </div>
+
+                <!-- Iron Condors -->
+                <div class="premium-card">
+                    <div class="card-header">
+                        <h3>IRON CONDORS</h3>
+                        <div class="rating good">
+                            <i class="fas fa-check-circle"></i>
+                            <i class="fas fa-check-circle"></i>
+                            <span>GOOD</span>
+                        </div>
+                    </div>
+                    <ul class="premium-details">
+                        <li><i class="fas fa-check"></i> VIX < 20: Low volatility environment</li>
+                        <li><i class="fas fa-check"></i> Stable range trading likely</li>
+                        <li><i class="fas fa-check"></i> Theta decay works best in calm markets</li>
+                        <li><i class="fas fa-exclamation-triangle"></i> VVIX elevated: Size positions 70%</li>
+                    </ul>
+                </div>
+
+                <!-- LEAPS Calls -->
+                <div class="premium-card">
+                    <div class="card-header">
+                        <h3>LEAPS CALLS</h3>
+                        <div class="rating excellent">
+                            <i class="fas fa-check-circle"></i>
+                            <i class="fas fa-check-circle"></i>
+                            <i class="fas fa-check-circle"></i>
+                            <span>EXCELLENT</span>
+                        </div>
+                    </div>
+                    <ul class="premium-details">
+                        <li><i class="fas fa-check"></i> VIX 19.08: Fair price to buy volatility</li>
+                        <li><i class="fas fa-check"></i> Long timeframe absorbs short-term vol spikes</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ZenOptions System Section -->
+    <section class="platform-system">
+        <div class="container">
+            <h2>The ZenOptions Platform</h2>
+            <p class="section-subtitle">Everything you need for systematic options trading</p>
+            
+            <div class="system-pillars">
+                <div class="pillar-card">
+                    <div class="pillar-icon">🔍</div>
+                    <h3>ZenScan</h3>
+                    <h4>Intelligent Trade Discovery</h4>
+                    <div class="pillar-features">
+                        <span><i class="fas fa-check"></i> Scans your watchlist with support/resistance analysis</span>
+                        <span><i class="fas fa-check"></i> Identifies high-probability credit spreads and iron condors</span>
+                        <span><i class="fas fa-check"></i> Systematic, customizable parameters</span>
+                        <span><i class="fas fa-check"></i> No more digging through endless options data</span>
+                    </div>
+                    <button class="btn-outline">Explore Scanner</button>
+                </div>
+                
+                <div class="pillar-card">
+                    <div class="pillar-icon">⚖️</div>
+                    <h3>ZenManage</h3>
+                    <h4>Semi-Active Risk Management</h4>
+                    <div class="pillar-features">
+                        <span><i class="fas fa-check"></i> Tracks and monitors all your positions</span>
+                        <span><i class="fas fa-check"></i> Systematic guidance for every phase</span>
+                        <span><i class="fas fa-check"></i> Clear alerts for profit-taking and loss management</span>
+                        <span><i class="fas fa-check"></i> Telegram integration for real-time notifications</span>
+                        <span><i class="fas fa-check"></i> Stay disciplined without constant monitoring</span>
+                    </div>
+                    <button class="btn-outline">See Management Rules</button>
+                </div>
+                
+                <div class="pillar-card">
+                    <div class="pillar-icon">📊</div>
+                    <h3>ZenInsights</h3>
+                    <h4>Market Analysis Made Simple</h4>
+                    <div class="pillar-features">
+                        <span><i class="fas fa-check"></i> Daily VIX/VVIX analysis and risk alerts</span>
+                        <span><i class="fas fa-check"></i> Sector rotation tracking and opportunity mapping</span>
+                        <span><i class="fas fa-check"></i> Market condition updates (defensive/bullish/bearish)</span>
+                        <span><i class="fas fa-check"></i> Know which strategies work best right now</span>
+                    </div>
+                    <button class="btn-outline">View Today's Analysis</button>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Market Opportunity Intelligence Section -->
+    <section class="market-opportunity-intelligence">
+        <div class="container">
+            <h2>Today's Sector Intelligence</h2>
+            <p class="section-subtitle">Live sector analysis identifying optimal opportunities for systematic strategies</p>
+            
+            <div class="sector-focus-grid">
+                <div class="sector-opportunity-card excellent">
+                    <div class="sector-header">
+                        <span class="sector-name">Consumer Staples (XLP)</span>
+                        <span class="rating-badge excellent-badge">EXCELLENT</span>
+                    </div>
+                    <div class="sector-metrics">
+                        <span>MTD: +3.66% | IV Rank: 8 | Trend: RANGE</span>
+                    </div>
+                    <div class="strategy-recommendation">
+                        <strong>Strategy Focus:</strong> Iron Condors - Low volatility, stable range-bound movement ideal for systematic premium collection
+                    </div>
+                    <div class="action-guidance">
+                        <strong>Action:</strong> Target 45 DTE, 5-7% wing spreads, avoid earnings within 14 days
+                    </div>
+                </div>
+                
+                <div class="sector-opportunity-card good">
+                    <div class="sector-header">
+                        <span class="sector-name">Energy (XLE)</span>
+                        <span class="rating-badge good-badge">GOOD</span>
+                    </div>
+                    <div class="sector-metrics">
+                        <span>MTD: +5.83% | IV Rank: 9 | Trend: RANGE</span>
+                    </div>
+                    <div class="strategy-recommendation">
+                        <strong>Strategy Focus:</strong> Credit Spreads - Moderate volatility supports systematic premium strategies
+                    </div>
+                    <div class="action-guidance">
+                        <strong>Action:</strong> Bearish call spreads on strength, bullish put spreads on weakness
+                    </div>
+                </div>
+                
+                <div class="sector-opportunity-card avoid">
+                    <div class="sector-header">
+                        <span class="sector-name">Healthcare (XLV)</span>
+                        <span class="rating-badge avoid-badge">AVOID</span>
+                    </div>
+                    <div class="sector-metrics">
+                        <span>MTD: +7.38% | IV Rank: 12 | Trend: RANGE</span>
+                    </div>
+                    <div class="strategy-recommendation">
+                        <strong>Current Status:</strong> Unclear signals - Wait for clearer directional confirmation
+                    </div>
+                    <div class="action-guidance">
+                        <strong>Action:</strong> Monitor for trend clarification before new systematic entries
+                    </div>
+                </div>
+            </div>
+            
+            <div class="intelligence-cta">
+                <button class="btn-primary">View Complete Sector Heatmap</button>
+            </div>
+        </div>
+    </section>
+
+    <!-- Live Strategy Intelligence Section -->
+    <section class="strategy-intelligence">
+        <div class="container">
+            <h2>Featured Strategies for Current Conditions</h2>
+            <p class="section-subtitle">Based on today's market environment, here are the top systematic strategies with their criteria</p>
+            
+            <div class="strategy-focus-grid">
+                <div class="strategy-card priority-1">
+                    <div class="strategy-header-full">
+                        <span class="strategy-number">1</span>
+                        <h3>Bullish Put Spreads</h3>
+                        <span class="rating-tag good">GOOD</span>
+                    </div>
+                    <div class="systematic-criteria">
+                        <h4>Current Systematic Criteria:</h4>
+                        <ul>
+                            <li>IV Rank: 30-50 (adequate premium collection)</li>
+                            <li>Uptrend or range-bound confirmation</li>
+                            <li>Defensive sectors (current regime favors)</li>
+                            <li>3%+ above key support levels</li>
+                        </ul>
+                    </div>
+                    <div class="why-now">
+                        <strong>Why This Works:</strong> Current market conditions provide adequate premium collection opportunities while maintaining manageable risk profiles for systematic execution.
+                    </div>
+                </div>
+                
+                <div class="strategy-card priority-3">
+                    <div class="strategy-header-full">
+                        <span class="strategy-number">3</span>
+                        <h3>Neutral Iron Condors</h3>
+                        <span class="rating-tag ideal">IDEAL ENVIRONMENT</span>
+                    </div>
+                    <div class="systematic-criteria">
+                        <h4>Current Systematic Criteria:</h4>
+                        <ul>
+                            <li>IV Rank: 15-40 (low to fair premium optimal)</li>
+                            <li>Range-bound, no strong trend</li>
+                            <li>Support/Resistance 5%+ apart</li>
+                            <li><strong>Rule:</strong> Close if VIX > 20</li>
+                        </ul>
+                    </div>
+                    <div class="why-now">
+                        <strong>Why This Works:</strong> Range-bound market environment allows theta decay to work optimally. Close positions if market breaks out of range or volatility spikes above threshold.
+                    </div>
+                </div>
+            </div>
+            
+            <div class="strategy-cta">
+                <p>These criteria are applied automatically in our scanner to find qualifying setups</p>
+                <button class="btn-primary">View All Strategy Criteria</button>
+            </div>
+        </div>
+    </section>
+
+    <!-- Live Opportunities Preview -->
+    <section class="opportunities-preview">
+        <div class="container">
+            <h2>High-Probability Setups Identified</h2>
+            <p class="section-subtitle">Current opportunities from our systematic scanning</p>
+            
+            <div class="opportunities-grid">
+                <div class="opportunity-card">
+                    <div class="opportunity-header">
+                        <span class="ticker">MSFT</span>
+                        <span class="strategy-type">Put Credit Spread</span>
+                        <span class="score">Score: 68.9</span>
+                    </div>
+                    <div class="opportunity-details">
+                        <div class="detail-row">
+                            <span>Strikes:</span>
+                            <span class="value">485/480</span>
+                        </div>
+                        <div class="detail-row">
+                            <span>DTE:</span>
+                            <span class="value">41 days</span>
+                        </div>
+                        <div class="detail-row">
+                            <span>Credit:</span>
+                            <span class="value">$1.50</span>
+                        </div>
+                        <div class="detail-row">
+                            <span>R:R Ratio:</span>
+                            <span class="value">2.33:1</span>
+                        </div>
+                    </div>
+                    <div class="qualification-reasons">
+                        <p><strong>Why this qualifies:</strong></p>
+                        <ul>
+                            <li>Perfect timing - 41 days lets you profit from time decay</li>
+                            <li>Options are fairly priced for collecting premium</li>
+                            <li>Strong price support at $480 protects this trade</li>
+                        </ul>
+                    </div>
+                    <button class="btn-primary">View Full Analysis</button>
+                </div>
+
+                <div class="opportunity-card">
+                    <div class="opportunity-header">
+                        <span class="ticker">AAPL</span>
+                        <span class="strategy-type">Iron Condor</span>
+                        <span class="score">Score: 72.4</span>
+                    </div>
+                    <div class="opportunity-details">
+                        <div class="detail-row">
+                            <span>Strikes:</span>
+                            <span class="value">195/190 / 210/215</span>
+                        </div>
+                        <div class="detail-row">
+                            <span>DTE:</span>
+                            <span class="value">45 days</span>
+                        </div>
+                        <div class="detail-row">
+                            <span>Credit:</span>
+                            <span class="value">$2.10</span>
+                        </div>
+                        <div class="detail-row">
+                            <span>R:R Ratio:</span>
+                            <span class="value">2.56:1</span>
+                        </div>
+                    </div>
+                    <div class="qualification-reasons">
+                        <p><strong>Why this qualifies:</strong></p>
+                        <ul>
+                            <li>45 days is the sweet spot for time decay profits</li>
+                            <li>Market is calm, perfect for iron condors</li>
+                            <li>Wide safety range with solid premium collection</li>
+                        </ul>
+                    </div>
+                    <button class="btn-primary">View Full Analysis</button>
+                </div>
+
+                <div class="opportunity-card">
+                    <div class="opportunity-header">
+                        <span class="ticker">XLV</span>
+                        <span class="strategy-type">LEAPS Call</span>
+                        <span class="score">Score: 65.7</span>
+                    </div>
+                    <div class="opportunity-details">
+                        <div class="detail-row">
+                            <span>Strike:</span>
+                            <span class="value">145</span>
+                        </div>
+                        <div class="detail-row">
+                            <span>DTE:</span>
+                            <span class="value">365 days</span>
+                        </div>
+                        <div class="detail-row">
+                            <span>Premium:</span>
+                            <span class="value">$8.50</span>
+                        </div>
+                        <div class="detail-row">
+                            <span>Delta:</span>
+                            <span class="value">0.68</span>
+                        </div>
+                    </div>
+                    <div class="qualification-reasons">
+                        <p><strong>Why this qualifies:</strong></p>
+                        <ul>
+                            <li>Healthcare sector showing strength (defensive)</li>
+                            <li>Good time to buy long-term call options</li>
+                            <li>Stock has strong support at current levels</li>
+                        </ul>
+                    </div>
+                    <button class="btn-primary">View Full Analysis</button>
+                </div>
+            </div>
+            
+            <div class="opportunities-cta">
+                <p>This represents a sample of today's systematic opportunities</p>
+                <button class="btn-primary-large">Access Full Scanner Results</button>
+            </div>
+        </div>
+    </section>
+
+    <!-- Why ZenOptions Section -->
+    <section class="platform-advantages">
+        <div class="container">
+            <h2>Why Choose ZenOptions?</h2>
+            
+            <div class="advantages-grid">
+                <div class="advantage-item">
+                    <div class="advantage-icon">
+                        <i class="fas fa-brain"></i>
+                    </div>
+                    <h3>Follow Proven Rules</h3>
+                    <p>Stop guessing. Our system follows time-tested rules for when to enter and exit trades, removing emotion from your decisions.</p>
+                </div>
+                <div class="advantage-item">
+                    <div class="advantage-icon">
+                        <i class="fas fa-chart-line"></i>
+                    </div>
+                    <h3>Understand The Market</h3>
+                    <p>Get daily plain-English analysis of market conditions. We tell you when it's safe to trade aggressively and when to be cautious.</p>
+                </div>
+                <div class="advantage-item">
+                    <div class="advantage-icon">
+                        <i class="fas fa-robot"></i>
+                    </div>
+                    <h3>Find Trades Faster</h3>
+                    <p>Stop spending hours analyzing options chains. Our scanner finds high-quality trade setups for you in seconds.</p>
+                </div>
+                <div class="advantage-item">
+                    <div class="advantage-icon">
+                        <i class="fas fa-bell"></i>
+                    </div>
+                    <h3>Never Miss an Alert</h3>
+                    <p>Get instant Telegram notifications when it's time to take profits, cut losses, or adjust your positions. Stay informed without watching the market all day.</p>
+                </div>
+            </div>
+            
+            <div class="cta-section">
+                <h3>Start Trading with Confidence</h3>
+                <p>Join traders who've stopped guessing and started following a proven system</p>
+                <button class="btn-primary-large">Start Your Free Trial</button>
+                <p class="cta-note">No credit card required • Full access to ZenScan • 3 scans per week</p>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="main-footer">
+        <div class="container">
+            <div class="footer-content">
+                <div class="footer-brand">
+                    <h3>ZenOptions</h3>
+                    <p>Smarter Options Trading</p>
+                </div>
+                
+                <div class="footer-links">
+                    <div class="link-column">
+                        <h4>Platform</h4>
+                        <a href="#scanner">Scanner</a>
+                        <a href="#positions">Position Manager</a>
+                        <a href="#intelligence">Market Intelligence</a>
+                        <a href="#methodology">Methodology</a>
+                    </div>
+                    <div class="link-column">
+                        <h4>Resources</h4>
+                        <a href="#learn">Learn</a>
+                        <a href="#docs">Documentation</a>
+                        <a href="#support">Support</a>
+                        <a href="#status">Status</a>
+                    </div>
+                    <div class="link-column">
+                        <h4>Company</h4>
+                        <a href="#about">About</a>
+                        <a href="#privacy">Privacy</a>
+                        <a href="#terms">Terms</a>
+                        <a href="#contact">Contact</a>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="footer-legal">
+                <p><strong>Risk Disclosure:</strong> Options involve substantial risk and are not suitable for all investors. ZenOptions provides educational analysis, not investment advice. Past performance does not guarantee future results.</p>
+                <p>© 2024 ZenOptions. All rights reserved.</p>
+            </div>
+        </div>
+    </footer>
+
+    <script src="js/main.js"></script>
+</body>
+</html>

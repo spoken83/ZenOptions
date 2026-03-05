@@ -1,0 +1,792 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Scanner - ZenOptions</title>
+    <meta name="description" content="Intelligent trade discovery with systematic scanning and spread candidate analysis.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="css/scanner.css">
+    <link rel="stylesheet" href="css/scanner-modal.css">
+</head>
+<body>
+    <!-- Market Data Ticker (Top Strip) -->
+    <div class="market-ticker">
+        <div class="ticker-scroll">
+            <span class="ticker-item positive">SPY +0.10%</span>
+            <span class="ticker-separator">|</span>
+            <span class="ticker-item negative">QQQ -0.32%</span>
+            <span class="ticker-separator">|</span>
+            <span class="ticker-item positive">DIA +0.12%</span>
+            <span class="ticker-separator">|</span>
+            <span class="ticker-item">VIX 19.08</span>
+            <span class="ticker-separator">|</span>
+            <span class="ticker-item positive">GLD +0.61%</span>
+            <span class="ticker-separator">|</span>
+            <span class="ticker-item positive">IWM +0.52%</span>
+            <span class="ticker-separator">|</span>
+            <span class="ticker-item negative">XLK -0.35%</span>
+            <span class="ticker-separator">|</span>
+            <span class="ticker-item positive">XLV +0.14%</span>
+            <span class="ticker-separator">|</span>
+            <span class="ticker-item positive">XLF +0.71%</span>
+        </div>
+    </div>
+
+    <!-- Header Navigation -->
+    <header class="main-header">
+        <div class="header-content">
+            <div class="logo-section">
+                <a href="index.html" class="logo">
+                    <i class="fas fa-home"></i>
+                    <span>Home</span>
+                </a>
+                <div class="nav-item">
+                    <i class="fas fa-list"></i>
+                    <span>Watchlist</span>
+                </div>
+                <a href="positions.html" class="nav-item">
+                    <i class="fas fa-chart-line"></i>
+                    <span>Positions</span>
+                </a>
+                <a href="scanner.html" class="nav-item active">
+                    <i class="fas fa-search"></i>
+                    <span>Scanner</span>
+                </a>
+                <a href="insights.html" class="nav-item">
+                    <i class="fas fa-lightbulb"></i>
+                    <span>Insights</span>
+                </a>
+                <div class="nav-item">
+                    <i class="fas fa-user"></i>
+                    <span>Account</span>
+                </div>
+            </div>
+            
+            <div class="auth-buttons">
+                <button class="btn-login">
+                    <i class="fas fa-sign-in-alt"></i> LOG IN
+                </button>
+                <button class="btn-signup">JOIN FOR FREE</button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Scanner Intro Section -->
+    <section class="scanner-intro">
+        <div class="container">
+            <h1>Options Scanner - Find Opportunities</h1>
+            <p class="intro-subtitle">Automated technical analysis to discover high-probability credit spread candidates across your watchlist.</p>
+            
+            <div class="scanner-features">
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <i class="fas fa-sync-alt"></i>
+                    </div>
+                    <div class="feature-content">
+                        <h3>Automated Scans</h3>
+                        <p>Daily scans with RSI and StochRSI filters</p>
+                    </div>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <i class="fas fa-chart-line"></i>
+                    </div>
+                    <div class="feature-content">
+                        <h3>Delta-Based Selection</h3>
+                        <p>Finds spreads within your delta range (0.20-0.35)</p>
+                    </div>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <i class="fas fa-check-circle"></i>
+                    </div>
+                    <div class="feature-content">
+                        <h3>Risk/Reward Filtering</h3>
+                        <p>Only shows trades meeting your R:R criteria</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Scanner Controls -->
+    <section class="scanner-controls">
+        <div class="container">
+            <div class="controls-header">
+                <h2>Scanner</h2>
+                <p class="controls-subtitle">Entry signal scanning and spread candidate analysis</p>
+            </div>
+            
+            <div class="controls-bar">
+                <div class="left-controls">
+                    <div class="scan-results-info">
+                        <i class="fas fa-check-circle"></i>
+                        <span class="results-label">Latest Scan Results</span>
+                        <span class="results-count">5 Qualified • 1 Setup Only • 0 Errors</span>
+                    </div>
+                    
+                    <div class="batch-timestamp-dropdown">
+                        <button class="btn-timestamp-dropdown" onclick="toggleBatchDropdown()">
+                            <i class="fas fa-calendar"></i>
+                            <span>Nov 15 19:42</span>
+                            <i class="fas fa-chevron-down"></i>
+                        </button>
+                        <div class="batch-dropdown-menu" id="batchDropdown" style="display: none;">
+                            <div class="batch-item active">
+                                <span class="batch-date">Nov 15 19:42</span>
+                                <span class="batch-count">5 qualified</span>
+                            </div>
+                            <div class="batch-item">
+                                <span class="batch-date">Nov 15 13:38</span>
+                                <span class="batch-count">3 qualified</span>
+                            </div>
+                            <div class="batch-item">
+                                <span class="batch-date">Nov 15 04:01</span>
+                                <span class="batch-count">4 qualified</span>
+                            </div>
+                            <div class="batch-item">
+                                <span class="batch-date">Nov 14 19:54</span>
+                                <span class="batch-count">2 qualified</span>
+                            </div>
+                            <div class="batch-item">
+                                <span class="batch-date">Nov 14 13:42</span>
+                                <span class="batch-count">6 qualified</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="right-controls">
+                    <select class="filter-dropdown" onchange="filterByStrategy(this.value)">
+                        <option value="all">All Strategies</option>
+                        <option value="put-spread">Put Credit Spreads</option>
+                        <option value="call-spread">Call Credit Spreads</option>
+                        <option value="iron-condor">Iron Condors</option>
+                        <option value="leaps">LEAPS Calls</option>
+                    </select>
+                    <select class="filter-dropdown" onchange="filterByRating(this.value)">
+                        <option value="all">All Ratings</option>
+                        <option value="excellent">Excellent Only</option>
+                        <option value="good">Good or Better</option>
+                    </select>
+                    <button class="btn-settings" onclick="openScanSettings()">
+                        <i class="fas fa-cog"></i>
+                    </button>
+                    <button class="btn-run-scan" onclick="runScan()">
+                        <i class="fas fa-sync-alt"></i> Run Scan
+                    </button>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Candidates to Monitor Section -->
+    <section class="candidates-monitor">
+        <div class="container">
+            <h2><i class="fas fa-eye"></i> Setup Only - No Qualified Spreads</h2>
+            <p class="section-description">These tickers show the right technical setup signals, but no option spreads meet our systematic criteria yet.</p>
+            
+            <div class="candidate-badges">
+                <span class="candidate-badge setup">
+                    <strong>AVGO</strong>
+                    <span class="badge-label setup-label">SETUP - PUT</span>
+                    <span class="badge-reason">No Spread</span>
+                </span>
+                <span class="candidate-badge setup">
+                    <strong>NFLX</strong>
+                    <span class="badge-label setup-label">SETUP - CALL</span>
+                    <span class="badge-reason">No Spread</span>
+                </span>
+                <span class="candidate-badge setup">
+                    <strong>GOOG</strong>
+                    <span class="badge-label setup-label">SETUP - PUT</span>
+                    <span class="badge-reason">No Spread</span>
+                </span>
+                <span class="candidate-badge setup">
+                    <strong>QQQ</strong>
+                    <span class="badge-label setup-label">SETUP - PUT</span>
+                    <span class="badge-reason">No Spread</span>
+                </span>
+                <span class="candidate-badge setup">
+                    <strong>META</strong>
+                    <span class="badge-label setup-label">SETUP - PUT</span>
+                    <span class="badge-reason">No Spread</span>
+                </span>
+                <span class="candidate-badge setup">
+                    <strong>SPY</strong>
+                    <span class="badge-label setup-label">SETUP - PUT</span>
+                    <span class="badge-reason">No Spread</span>
+                </span>
+                <span class="candidate-badge setup">
+                    <strong>PLTR</strong>
+                    <span class="badge-label setup-label">SETUP - PUT</span>
+                    <span class="badge-reason">No Spread</span>
+                </span>
+                <span class="candidate-badge setup">
+                    <strong>NVDA</strong>
+                    <span class="badge-label setup-label">SETUP - PUT</span>
+                    <span class="badge-reason">No Spread</span>
+                </span>
+                <span class="candidate-badge setup">
+                    <strong>AMZN</strong>
+                    <span class="badge-label setup-label">SETUP - PUT</span>
+                    <span class="badge-reason">No Spread</span>
+                </span>
+                <span class="candidate-badge setup">
+                    <strong>TXN</strong>
+                    <span class="badge-label setup-label">SETUP - PUT</span>
+                    <span class="badge-reason">No Spread</span>
+                </span>
+            </div>
+        </div>
+    </section>
+
+    <!-- Qualified Opportunities Section -->
+    <section class="qualified-opportunities">
+        <div class="container">
+            <h2><i class="fas fa-check-circle"></i> Ready to Trade - Setup + Spread (4)</h2>
+            <p class="section-description">These opportunities have both the right technical setup AND option spreads that meet all our systematic criteria (delta, R:R, DTE, premium).</p>
+            
+            <!-- Opportunity Cards Grid -->
+            <div class="opportunities-grid">
+                
+                <!-- IWM Put Credit Spread -->
+                <div class="opportunity-card" data-symbol="IWM" data-strategy="put-spread" data-rating="excellent">
+                    <div class="card-header">
+                        <div class="card-title-section">
+                            <h3>IWM <span class="contract-label">Put Credit Spread</span></h3>
+                            <span class="strategy-badge put-spread">$1.86 Credit</span>
+                        </div>
+                        <div class="rating-badge excellent">EXCELLENT<span class="score">96.1</span></div>
+                    </div>
+                    
+                    <div class="card-metrics">
+                        <div class="metric-row">
+                            <div class="metric">
+                                <span class="metric-label">Strike / Strike</span>
+                                <span class="metric-value">227 / 219</span>
+                            </div>
+                            <div class="metric">
+                                <span class="metric-label">Width / Entry</span>
+                                <span class="metric-value">$8 / $6.00 - $0.29</span>
+                            </div>
+                        </div>
+                        <div class="metric-row">
+                            <div class="metric">
+                                <span class="metric-label">DTE / Expiry</span>
+                                <span class="metric-value">46d / Dec 31</span>
+                            </div>
+                            <div class="metric">
+                                <span class="metric-label">R:R Ratio</span>
+                                <span class="metric-value success">2.23:1</span>
+                            </div>
+                        </div>
+                        <div class="metric-row">
+                            <div class="metric">
+                                <span class="metric-label">Max Profit / Loss</span>
+                                <span class="metric-value"><span class="positive">$186</span> / <span class="negative">-$614</span></span>
+                            </div>
+                            <div class="metric">
+                                <span class="metric-label">PoP</span>
+                                <span class="metric-value">96.1%</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="qualification-summary">
+                        <h4><i class="fas fa-clipboard-check"></i> Why This Qualifies</h4>
+                        <div class="qualification-reasons">
+                            <div class="reason-item">
+                                <i class="fas fa-check-circle"></i>
+                                <span><strong>Strong Support Zone:</strong> RSI 41.11 shows oversold conditions with support at $236</span>
+                            </div>
+                            <div class="reason-item">
+                                <i class="fas fa-check-circle"></i>
+                                <span><strong>Ideal DTE Window:</strong> 46 days provides optimal time decay (our 45±5 day rule)</span>
+                            </div>
+                            <div class="reason-item">
+                                <i class="fas fa-check-circle"></i>
+                                <span><strong>High Probability Setup:</strong> Short strike 13.5% below current price with 96.1% PoP</span>
+                            </div>
+                            <div class="reason-item">
+                                <i class="fas fa-check-circle"></i>
+                                <span><strong>Excellent Credit:</strong> $1.86/contract credit on $8 width = 23.3% return potential</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="card-actions">
+                        <button class="btn-full-analysis" onclick="openAnalysisModal('IWM')">
+                            <i class="fas fa-chart-bar"></i> View Full Analysis
+                        </button>
+                        <button class="btn-add-position" onclick="addToPositions('IWM')">
+                            <i class="fas fa-plus"></i> Add to Positions
+                        </button>
+                    </div>
+                </div>
+
+                <!-- MSFT Put Credit Spread -->
+                <div class="opportunity-card" data-symbol="MSFT" data-strategy="put-spread" data-rating="excellent">
+                    <div class="card-header">
+                        <div class="card-title-section">
+                            <h3>MSFT <span class="contract-label">Put Credit Spread</span></h3>
+                            <span class="strategy-badge put-spread">$2.15 Credit</span>
+                        </div>
+                        <div class="rating-badge excellent">EXCELLENT<span class="score">94.2</span></div>
+                    </div>
+                    
+                    <div class="card-metrics">
+                        <div class="metric-row">
+                            <div class="metric">
+                                <span class="metric-label">Strike / Strike</span>
+                                <span class="metric-value">410 / 400</span>
+                            </div>
+                            <div class="metric">
+                                <span class="metric-label">Width / Entry</span>
+                                <span class="metric-value">$10 / $421.18</span>
+                            </div>
+                        </div>
+                        <div class="metric-row">
+                            <div class="metric">
+                                <span class="metric-label">DTE / Expiry</span>
+                                <span class="metric-value">43d / Dec 28</span>
+                            </div>
+                            <div class="metric">
+                                <span class="metric-label">R:R Ratio</span>
+                                <span class="metric-value success">2.68:1</span>
+                            </div>
+                        </div>
+                        <div class="metric-row">
+                            <div class="metric">
+                                <span class="metric-label">Max Profit / Loss</span>
+                                <span class="metric-value"><span class="positive">$215</span> / <span class="negative">-$785</span></span>
+                            </div>
+                            <div class="metric">
+                                <span class="metric-label">PoP</span>
+                                <span class="metric-value">94.2%</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="qualification-summary">
+                        <h4><i class="fas fa-clipboard-check"></i> Why This Qualifies</h4>
+                        <div class="qualification-reasons">
+                            <div class="reason-item">
+                                <i class="fas fa-check-circle"></i>
+                                <span><strong>Uptrend Support:</strong> Price holding above key support at $415, with RSI at healthy 58.3</span>
+                            </div>
+                            <div class="reason-item">
+                                <i class="fas fa-check-circle"></i>
+                                <span><strong>Technology Sector Strength:</strong> XLK showing resilience despite -0.35% today</span>
+                            </div>
+                            <div class="reason-item">
+                                <i class="fas fa-check-circle"></i>
+                                <span><strong>Conservative Strike Placement:</strong> Short strike 2.7% below current, 94.2% probability</span>
+                            </div>
+                            <div class="reason-item">
+                                <i class="fas fa-check-circle"></i>
+                                <span><strong>Strong Premium:</strong> $2.15 credit represents 21.5% max return on $10 width</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="card-actions">
+                        <button class="btn-full-analysis" onclick="openAnalysisModal('MSFT')">
+                            <i class="fas fa-chart-bar"></i> View Full Analysis
+                        </button>
+                        <button class="btn-add-position" onclick="addToPositions('MSFT')">
+                            <i class="fas fa-plus"></i> Add to Positions
+                        </button>
+                    </div>
+                </div>
+
+                <!-- AAPL Iron Condor -->
+                <div class="opportunity-card" data-symbol="AAPL" data-strategy="iron-condor" data-rating="good">
+                    <div class="card-header">
+                        <div class="card-title-section">
+                            <h3>AAPL <span class="contract-label">Iron Condor</span></h3>
+                            <span class="strategy-badge iron-condor">$3.40 Credit</span>
+                        </div>
+                        <div class="rating-badge good">GOOD<span class="score">68.5</span></div>
+                    </div>
+                    
+                    <div class="card-metrics">
+                        <div class="metric-row">
+                            <div class="metric">
+                                <span class="metric-label">Put Strikes</span>
+                                <span class="metric-value">220 / 215</span>
+                            </div>
+                            <div class="metric">
+                                <span class="metric-label">Call Strikes</span>
+                                <span class="metric-value">240 / 245</span>
+                            </div>
+                        </div>
+                        <div class="metric-row">
+                            <div class="metric">
+                                <span class="metric-label">Width / Entry</span>
+                                <span class="metric-value">$5 / $229.85</span>
+                            </div>
+                            <div class="metric">
+                                <span class="metric-label">DTE / Expiry</span>
+                                <span class="metric-value">42d / Dec 27</span>
+                            </div>
+                        </div>
+                        <div class="metric-row">
+                            <div class="metric">
+                                <span class="metric-label">Max Profit / Loss</span>
+                                <span class="metric-value"><span class="positive">$340</span> / <span class="negative">-$160</span></span>
+                            </div>
+                            <div class="metric">
+                                <span class="metric-label">PoP</span>
+                                <span class="metric-value">68.5%</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="qualification-summary">
+                        <h4><i class="fas fa-clipboard-check"></i> Why This Qualifies</h4>
+                        <div class="qualification-reasons">
+                            <div class="reason-item">
+                                <i class="fas fa-check-circle"></i>
+                                <span><strong>Range-Bound Price Action:</strong> Trading in $220-$240 channel for 3 weeks</span>
+                            </div>
+                            <div class="reason-item">
+                                <i class="fas fa-check-circle"></i>
+                                <span><strong>Neutral RSI:</strong> RSI at 52 indicates balanced momentum, ideal for IC</span>
+                            </div>
+                            <div class="reason-item">
+                                <i class="fas fa-check-circle"></i>
+                                <span><strong>Symmetric Risk:</strong> 4.3% downside cushion, 4.4% upside cushion</span>
+                            </div>
+                            <div class="reason-item">
+                                <i class="fas fa-check-circle"></i>
+                                <span><strong>Decent Premium:</strong> $3.40 credit on $5 wings = 68% max return potential</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="card-actions">
+                        <button class="btn-full-analysis" onclick="openAnalysisModal('AAPL')">
+                            <i class="fas fa-chart-bar"></i> View Full Analysis
+                        </button>
+                        <button class="btn-add-position" onclick="addToPositions('AAPL')">
+                            <i class="fas fa-plus"></i> Add to Positions
+                        </button>
+                    </div>
+                </div>
+
+                <!-- XLV LEAPS Call -->
+                <div class="opportunity-card" data-symbol="XLV" data-strategy="leaps" data-rating="excellent">
+                    <div class="card-header">
+                        <div class="card-title-section">
+                            <h3>XLV <span class="contract-label">LEAPS Call</span></h3>
+                            <span class="strategy-badge leaps">$8.50 Debit</span>
+                        </div>
+                        <div class="rating-badge excellent">EXCELLENT<span class="score">91.8</span></div>
+                    </div>
+                    
+                    <div class="card-metrics">
+                        <div class="metric-row">
+                            <div class="metric">
+                                <span class="metric-label">Strike / Entry</span>
+                                <span class="metric-value">155 / $163.42</span>
+                            </div>
+                            <div class="metric">
+                                <span class="metric-label">DTE / Expiry</span>
+                                <span class="metric-value">424d / Jan 2026</span>
+                            </div>
+                        </div>
+                        <div class="metric-row">
+                            <div class="metric">
+                                <span class="metric-label">Breakeven</span>
+                                <span class="metric-value">$163.50</span>
+                            </div>
+                            <div class="metric">
+                                <span class="metric-label">Delta</span>
+                                <span class="metric-value">0.68</span>
+                            </div>
+                        </div>
+                        <div class="metric-row">
+                            <div class="metric">
+                                <span class="metric-label">Cost / Contract</span>
+                                <span class="metric-value">$850</span>
+                            </div>
+                            <div class="metric">
+                                <span class="metric-label">Target Gain</span>
+                                <span class="metric-value success">+60%</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="qualification-summary">
+                        <h4><i class="fas fa-clipboard-check"></i> Why This Qualifies</h4>
+                        <div class="qualification-reasons">
+                            <div class="reason-item">
+                                <i class="fas fa-check-circle"></i>
+                                <span><strong>Healthcare Sector Leader:</strong> XLV up +0.14% today, strong fundamentals</span>
+                            </div>
+                            <div class="reason-item">
+                                <i class="fas fa-check-circle"></i>
+                                <span><strong>Deep ITM Safety:</strong> $8.42 in-the-money provides downside protection</span>
+                            </div>
+                            <div class="reason-item">
+                                <i class="fas fa-check-circle"></i>
+                                <span><strong>High Delta:</strong> 0.68 delta means 68% of stock movement captured</span>
+                            </div>
+                            <div class="reason-item">
+                                <i class="fas fa-check-circle"></i>
+                                <span><strong>Long-Term Trend:</strong> 424 days allows sector rotation to play out</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="card-actions">
+                        <button class="btn-full-analysis" onclick="openAnalysisModal('XLV')">
+                            <i class="fas fa-chart-bar"></i> View Full Analysis
+                        </button>
+                        <button class="btn-add-position" onclick="addToPositions('XLV')">
+                            <i class="fas fa-plus"></i> Add to Positions
+                        </button>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </section>
+
+    <!-- Analysis Modal (Hidden by default) -->
+    <div class="modal-overlay" id="analysisModal" style="display: none;" onclick="closeAnalysisModal(event)">
+        <div class="modal-container" onclick="event.stopPropagation()">
+            <div class="modal-header">
+                <h3 id="modalTitle"><i class="fas fa-chart-line"></i> Full Analysis - IWM Put Credit Spread</h3>
+                <button class="btn-close-modal" onclick="closeAnalysisModal()">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+
+            <!-- Modal Tabs -->
+            <div class="modal-tabs">
+                <button class="tab-button active" onclick="switchTab('analysis')">
+                    <i class="fas fa-chart-bar"></i> Technical Analysis
+                </button>
+                <button class="tab-button" onclick="switchTab('scanlogs')">
+                    <i class="fas fa-terminal"></i> Scan Logs
+                </button>
+            </div>
+
+            <!-- Tab Content -->
+            <div class="modal-body">
+                <!-- Analysis Tab -->
+                <div class="tab-content active" id="tab-analysis">
+                    <div class="analysis-compact">
+                        
+                        <!-- Technical Indicators -->
+                        <div class="analysis-section-compact">
+                            <h4><i class="fas fa-calculator"></i> Technical Indicators</h4>
+                            <div class="metrics-grid-compact">
+                                <div class="metric-compact">
+                                    <span class="label">RSI (14)</span>
+                                    <span class="value">41.11</span>
+                                    <span class="note">Oversold - bullish reversal potential</span>
+                                </div>
+                                <div class="metric-compact">
+                                    <span class="label">Stochastic K/D</span>
+                                    <span class="value">13.57 / 25.26</span>
+                                    <span class="note">Very oversold - strong bounce probability</span>
+                                </div>
+                                <div class="metric-compact">
+                                    <span class="label">Current Price</span>
+                                    <span class="value">$227.08</span>
+                                    <span class="note">Recent pullback from resistance</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Support & Resistance (Compact) -->
+                        <div class="analysis-section-compact">
+                            <h4><i class="fas fa-layer-group"></i> Support & Resistance</h4>
+                            <div class="sr-compact">
+                                <div class="sr-row resistance">
+                                    <span class="sr-label">Resistance</span>
+                                    <span class="sr-price">$237.45</span>
+                                    <span class="sr-distance">+4.6%</span>
+                                </div>
+                                <div class="sr-row current">
+                                    <span class="sr-label">Current Price</span>
+                                    <span class="sr-price">$227.08</span>
+                                    <span class="sr-distance">—</span>
+                                </div>
+                                <div class="sr-row short">
+                                    <span class="sr-label">Short Strike</span>
+                                    <span class="sr-price">$227.00</span>
+                                    <span class="sr-distance">-0.04%</span>
+                                </div>
+                                <div class="sr-row support">
+                                    <span class="sr-label">Support</span>
+                                    <span class="sr-price">$236.00</span>
+                                    <span class="sr-distance">-3.9%</span>
+                                </div>
+                                <div class="sr-row long">
+                                    <span class="sr-label">Long Strike</span>
+                                    <span class="sr-price">$219.00</span>
+                                    <span class="sr-distance">-3.6%</span>
+                                </div>
+                            </div>
+                            <p class="sr-note">
+                                <i class="fas fa-info-circle"></i> Short strike placed 13.5% below current, well below support. Excellent safety margin.
+                            </p>
+                        </div>
+
+                        <!-- Risk Analysis (Compact Grid) -->
+                        <div class="analysis-section-compact">
+                            <h4><i class="fas fa-shield-alt"></i> Risk Analysis</h4>
+                            <div class="metrics-grid-compact">
+                                <div class="metric-compact">
+                                    <span class="label">Max Risk</span>
+                                    <span class="value negative">$614</span>
+                                </div>
+                                <div class="metric-compact">
+                                    <span class="label">Max Profit</span>
+                                    <span class="value positive">$186</span>
+                                </div>
+                                <div class="metric-compact">
+                                    <span class="label">R:R Ratio</span>
+                                    <span class="value">2.23:1</span>
+                                </div>
+                                <div class="metric-compact">
+                                    <span class="label">Breakeven</span>
+                                    <span class="value">$225.14</span>
+                                </div>
+                                <div class="metric-compact">
+                                    <span class="label">PoP</span>
+                                    <span class="value success">96.1%</span>
+                                </div>
+                                <div class="metric-compact">
+                                    <span class="label">Position Size</span>
+                                    <span class="value">1-2 contracts</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Systematic Rules -->
+                        <div class="analysis-section-compact">
+                            <h4><i class="fas fa-clipboard-list"></i> Systematic Rules ✓</h4>
+                            <div class="rules-compact">
+                                <div class="rule-passed">✓ DTE: 46 days (Target: 45±5)</div>
+                                <div class="rule-passed">✓ IV Rank: Above 30th percentile</div>
+                                <div class="rule-passed">✓ Technical: Oversold RSI + support</div>
+                                <div class="rule-passed">✓ Strikes: Below key support</div>
+                                <div class="rule-passed">✓ Premium: 23.3% return (>15%)</div>
+                                <div class="rule-passed">✓ Probability: 96.1% PoP (>70%)</div>
+                            </div>
+                        </div>
+
+                        <!-- Trade Plan -->
+                        <div class="analysis-section-compact trade-plan">
+                            <h4><i class="fas fa-map-marked-alt"></i> 4-Step Trade Plan</h4>
+                            <div class="steps-compact">
+                                <div class="step-compact">
+                                    <span class="num">1</span>
+                                    <div>
+                                        <strong>Entry:</strong> Sell 227/219 for $1.86+ credit at market open or slight bounce
+                                    </div>
+                                </div>
+                                <div class="step-compact">
+                                    <span class="num">2</span>
+                                    <div>
+                                        <strong>Profit Target:</strong> Close at 50-70% max profit ($93-$130). GTC at $0.56 debit
+                                    </div>
+                                </div>
+                                <div class="step-compact">
+                                    <span class="num">3</span>
+                                    <div>
+                                        <strong>Time Exit:</strong> Close by 21 DTE (Dec 10) if target not hit
+                                    </div>
+                                </div>
+                                <div class="step-compact">
+                                    <span class="num">4</span>
+                                    <div>
+                                        <strong>Risk:</strong> Close if price breaches $227 with 21+ DTE remaining
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Scan Logs Tab -->
+                <div class="tab-content" id="tab-scanlogs" style="display: none;">
+                    <div class="scan-logs-container">
+                        <pre class="scan-log-text" id="scanLogContent">Loading scan logs...</pre>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Modal Footer -->
+            <div class="modal-footer">
+                <button class="btn-modal-action secondary" onclick="closeAnalysisModal()">
+                    Close
+                </button>
+                <button class="btn-modal-action primary" onclick="addToPositionsFromModal()">
+                    <i class="fas fa-plus"></i> Add to Positions
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="main-footer">
+        <div class="footer-content">
+            <div class="footer-section">
+                <h4>Platform</h4>
+                <ul>
+                    <li><a href="scanner.html">Scanner</a></li>
+                    <li><a href="positions.html">Position Manager</a></li>
+                    <li><a href="insights.html">Market Intelligence</a></li>
+                    <li><a href="#">Methodology</a></li>
+                </ul>
+            </div>
+            <div class="footer-section">
+                <h4>Resources</h4>
+                <ul>
+                    <li><a href="#">Learn</a></li>
+                    <li><a href="#">Documentation</a></li>
+                    <li><a href="#">Support</a></li>
+                    <li><a href="#">Status</a></li>
+                </ul>
+            </div>
+            <div class="footer-section">
+                <h4>Company</h4>
+                <ul>
+                    <li><a href="#">About</a></li>
+                    <li><a href="#">Privacy</a></li>
+                    <li><a href="#">Terms</a></li>
+                    <li><a href="#">Contact</a></li>
+                </ul>
+            </div>
+            <div class="footer-section">
+                <h4>Connect</h4>
+                <div class="social-links">
+                    <a href="#" class="social-link"><i class="fab fa-twitter"></i></a>
+                    <a href="#" class="social-link"><i class="fab fa-telegram"></i></a>
+                    <a href="#" class="social-link"><i class="fab fa-discord"></i></a>
+                </div>
+            </div>
+        </div>
+        <div class="footer-bottom">
+            <p class="disclaimer">
+                <strong>Risk Disclosure:</strong> Options involve substantial risk and are not suitable for all investors. 
+                ZenOptions provides educational analysis, not investment advice. Past performance does not guarantee future results.
+            </p>
+            <p class="copyright">© 2024 ZenOptions. All rights reserved.</p>
+        </div>
+    </footer>
+
+    <script src="js/scanner.js"></script>
+</body>
+</html>
