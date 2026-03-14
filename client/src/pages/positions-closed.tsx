@@ -1,11 +1,12 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Edit, Trash2, TrendingUp, BarChart3, Calendar } from "lucide-react";
+import { Edit, Trash2, TrendingUp, BarChart3, Calendar, Search } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { PageSEO } from "@/components/seo/PageSEO";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import {
   Table,
   TableBody,
@@ -47,6 +48,7 @@ export default function PositionsClosed() {
   const { toast } = useToast();
   const { isAuthenticated } = useAuth();
   const [accountFilter, setAccountFilter] = useState<string>("all");
+  const [symbolSearch, setSymbolSearch] = useState("");
   const [closedMonthFilter, setClosedMonthFilter] = useState<string>("all");
   const [isEditCloseOpen, setIsEditCloseOpen] = useState(false);
   const [isEditPositionOpen, setIsEditPositionOpen] = useState(false);
@@ -77,8 +79,13 @@ export default function PositionsClosed() {
     });
   };
 
+  const filterBySymbol = (positionsList: Position[]) => {
+    if (!symbolSearch) return positionsList;
+    return positionsList.filter(p => p.symbol.toLowerCase().includes(symbolSearch.toLowerCase()));
+  };
+
   const allClosedPositions = filterByAccount(positions || []);
-  const closedPositions = filterByClosedMonth(allClosedPositions);
+  const closedPositions = filterBySymbol(filterByClosedMonth(allClosedPositions));
 
   const availableClosedMonths = Array.from(
     new Set(
@@ -243,6 +250,12 @@ export default function PositionsClosed() {
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
               <h3 className="text-lg sm:text-xl font-semibold">Closed Positions ({closedPositions.length})</h3>
               <div className="flex flex-wrap items-center gap-2">
+                <Input
+                  placeholder="Filter symbol..."
+                  value={symbolSearch}
+                  onChange={(e) => setSymbolSearch(e.target.value)}
+                  className="w-[110px] sm:w-[140px] text-xs sm:text-sm"
+                />
                 <Select value={closedMonthFilter} onValueChange={setClosedMonthFilter}>
                   <SelectTrigger className="w-[140px] sm:w-[180px]" data-testid="select-closed-month-filter">
                     <SelectValue placeholder="All months" />

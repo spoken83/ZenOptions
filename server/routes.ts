@@ -28,6 +28,7 @@ import scannerRouter from "./routes/scanner";
 import alertsRouter from "./routes/alerts";
 import settingsRouter from "./routes/settings";
 import adminRouter from "./routes/admin";
+import reconciliationRouter from "./routes/reconciliation";
 
 // Use test key in development, production key in production
 const stripeSecretKey = process.env.NODE_ENV === 'development'
@@ -247,6 +248,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.use(alertsRouter);
   app.use(settingsRouter);
   app.use(adminRouter);
+  app.use(reconciliationRouter);
 
   // Position routes (pre-login preview enabled)
   app.get("/api/positions", optionalAuth, async (req: any, res) => {

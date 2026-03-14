@@ -2,7 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Plus, Pencil, Trash2, Building2, ExternalLink, User, Mail, CreditCard, Calendar, Send, MessageSquare } from "lucide-react";
+import { Plus, Pencil, Trash2, Building2, ExternalLink, User, Mail, CreditCard, Calendar, Send, MessageSquare, Upload, FileText, CheckCircle2, AlertTriangle, XCircle, Loader2, ChevronDown, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
@@ -12,7 +12,8 @@ import { apiRequest } from "@/lib/queryClient";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useAuth } from "@/hooks/useAuth";
 import { PageSEO } from "@/components/seo/PageSEO";
 import type { Portfolio, InsertPortfolio } from "@shared/schema";
@@ -35,6 +36,15 @@ export default function Profile() {
   const [editingPortfolio, setEditingPortfolio] = useState<Portfolio | null>(null);
   const [telegramChatId, setTelegramChatId] = useState('');
   const [editingTelegram, setEditingTelegram] = useState(false);
+
+  // Reconciliation state
+  const [reconPortfolioId, setReconPortfolioId] = useState<string>('');
+  const [reconResult, setReconResult] = useState<any>(null);
+  const [reconLoading, setReconLoading] = useState(false);
+  const [reconError, setReconError] = useState<string | null>(null);
+  const [expandedMissing, setExpandedMissing] = useState<Set<number>>(new Set());
+  const [expandedDiffs, setExpandedDiffs] = useState<Set<number>>(new Set());
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Populate Telegram chat ID when user data loads
   useEffect(() => {
@@ -218,6 +228,57 @@ export default function Profile() {
       deletePortfolioMutation.mutate(id);
     }
   };
+
+  const handleStatementUpload = useCallback(async (file: File) => {
+    if (!reconPortfolioId) {
+      toast({
+        title: "Select Account",
+        description: "Please select which portfolio account this statement belongs to",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setReconLoading(true);
+    setReconError(null);
+    setReconResult(null);
+
+    try {
+      const formData = new FormData();
+      formData.append('statement', file);
+      formData.append('portfolioId', reconPortfolioId);
+
+      const response = await fetch('/api/reconciliation/upload', {
+        method: 'POST',
+        body: formData,
+        credentials: 'include',
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || 'Upload failed');
+      }
+
+      const result = await response.json();
+      setReconResult(result);
+      toast({
+        title: "Statement Processed",
+        description: `Extracted ${result.summary.totalStatementPositions} positions from statement`,
+      });
+    } catch (error: any) {
+      setReconError(error.message || 'Failed to process statement');
+      toast({
+        title: "Error",
+        description: error.message || "Failed to process statement",
+        variant: "destructive",
+      });
+    } finally {
+      setReconLoading(false);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    }
+  }, [reconPortfolioId, toast]);
 
   const onPortfolioSubmit = (data: PortfolioForm) => {
     if (editingPortfolio) {
@@ -519,6 +580,462 @@ export default function Profile() {
           </table>
         </div>
       </div>
+
+      {/* Statement Reconciliation Section */}
+      <Card className="mt-8">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <FileText className="h-5 w-5" />
+            Statement Reconciliation
+          </CardTitle>
+          <p className="text-sm text-muted-foreground">
+            Upload a broker statement (PDF) to compare trades against your tracked positions and identify discrepancies.
+          </p>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            {/* Account selection + Upload */}
+            <div className="flex flex-col sm:flex-row gap-3">
+              <div className="flex-1">
+                <label className="text-sm font-medium mb-1.5 block">Statement Account</label>
+                <Select value={reconPortfolioId} onValueChange={setReconPortfolioId}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select which account this statement belongs to..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {portfolios?.map((p) => (
+                      <SelectItem key={p.id} value={p.id}>
+                        {p.name} {p.accountNumber ? `(${p.accountNumber})` : ''}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex items-end">
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="application/pdf"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) handleStatementUpload(file);
+                  }}
+                />
+                <Button
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={reconLoading || !reconPortfolioId}
+                >
+                  {reconLoading ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Processing...
+                    </>
+                  ) : (
+                    <>
+                      <Upload className="mr-2 h-4 w-4" />
+                      Upload Statement
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
+
+            {/* Error */}
+            {reconError && (
+              <div className="p-3 rounded-lg bg-destructive/10 text-destructive text-sm flex items-center gap-2">
+                <XCircle className="h-4 w-4 flex-shrink-0" />
+                {reconError}
+              </div>
+            )}
+
+            {/* Results */}
+            {reconResult && (
+              <div className="space-y-4">
+                {/* Summary */}
+                <div className="p-4 rounded-lg bg-muted">
+                  <div className="flex flex-wrap items-center gap-4 mb-3">
+                    <span className="font-semibold">{reconResult.accountName}</span>
+                    <span className="text-sm text-muted-foreground">Account: {reconResult.accountNumber}</span>
+                    <span className="text-sm text-muted-foreground">Period: {reconResult.statementPeriod}</span>
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-6 gap-3">
+                    <div className="text-center">
+                      <div className="text-2xl font-bold">{reconResult.summary.totalStatementPositions}</div>
+                      <div className="text-xs text-muted-foreground">In Statement</div>
+                    </div>
+                    <div className="text-center">
+                      <div className="text-2xl font-bold text-success">{reconResult.summary.matched}</div>
+                      <div className="text-xs text-muted-foreground">Matched</div>
+                    </div>
+                    <div className="text-center">
+                      <div className={`text-2xl font-bold ${reconResult.matched.filter((m: any) => m.differences.length > 0).length > 0 ? 'text-warning' : 'text-muted-foreground'}`}>
+                        {reconResult.matched.filter((m: any) => m.differences.length > 0).length}
+                      </div>
+                      <div className="text-xs text-muted-foreground">Differences</div>
+                    </div>
+                    <div className="text-center">
+                      <div className={`text-2xl font-bold ${(reconResult.summary.potentialMatches || 0) > 0 ? 'text-orange-500' : 'text-muted-foreground'}`}>
+                        {reconResult.summary.potentialMatches || 0}
+                      </div>
+                      <div className="text-xs text-muted-foreground">Possible Matches</div>
+                    </div>
+                    <div className="text-center">
+                      <div className={`text-2xl font-bold ${reconResult.summary.missingFromDB > 0 ? 'text-destructive' : 'text-muted-foreground'}`}>
+                        {reconResult.summary.missingFromDB}
+                      </div>
+                      <div className="text-xs text-muted-foreground">Missing from DB</div>
+                    </div>
+                    <div className="text-center">
+                      <div className={`text-2xl font-bold ${(reconResult.summary.inDBNotInStatement || 0) > 0 ? 'text-blue-500' : 'text-muted-foreground'}`}>
+                        {reconResult.summary.inDBNotInStatement || 0}
+                      </div>
+                      <div className="text-xs text-muted-foreground">In DB Only</div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Potential Matches - same symbol but wrong parameters */}
+                {reconResult.potentialMatches && reconResult.potentialMatches.length > 0 && (
+                  <div>
+                    <h4 className="font-semibold mb-2 flex items-center gap-2 text-orange-500">
+                      <AlertTriangle className="h-4 w-4" />
+                      Possible Matches - Verify Parameters ({reconResult.potentialMatches.length})
+                    </h4>
+                    <p className="text-xs text-muted-foreground mb-2">
+                      These positions exist in both the statement and DB but couldn't auto-match. They likely have incorrect parameters in the DB that need updating.
+                    </p>
+                    <div className="space-y-2">
+                      {reconResult.potentialMatches.map((m: any, i: number) => (
+                        <div key={i} className="p-3 rounded-lg border border-orange-500/30 bg-orange-500/5">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="font-medium">{m.statement.symbol}</span>
+                            <span className="text-sm text-muted-foreground">
+                              {m.statement.type} {m.statement.shortStrike}/{m.statement.longStrike}
+                            </span>
+                            <span className="text-sm text-muted-foreground">exp {m.statement.expiry}</span>
+                          </div>
+                          <p className="text-xs text-orange-600 dark:text-orange-400 mb-1">{m.matchReason}</p>
+                          <ul className="text-sm space-y-0.5">
+                            {m.differences.map((diff: string, j: number) => (
+                              <li key={j} className="text-orange-600 dark:text-orange-400">- {diff}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Missing from DB - truly unmatched statement positions */}
+                {reconResult.missingFromDB.length > 0 && (
+                  <div>
+                    <h4 className="font-semibold mb-2 flex items-center gap-2 text-destructive">
+                      <XCircle className="h-4 w-4" />
+                      In Statement but Not in Database ({reconResult.missingFromDB.length})
+                    </h4>
+                    <p className="text-xs text-muted-foreground mb-2">
+                      These trades appear in the broker statement but have no corresponding position in your database. Click a row to see extracted trade legs.
+                    </p>
+                    <div className="border rounded-lg overflow-hidden">
+                      <table className="w-full text-sm">
+                        <thead className="bg-muted">
+                          <tr>
+                            <th className="w-6 p-2"></th>
+                            <th className="text-left p-2">Symbol</th>
+                            <th className="text-left p-2">Strategy</th>
+                            <th className="text-left p-2">Strikes</th>
+                            <th className="text-left p-2">Expiry</th>
+                            <th className="text-right p-2">Contracts</th>
+                            <th className="text-right p-2">Entry Credit</th>
+                            <th className="text-left p-2">Status</th>
+                            <th className="text-left p-2">Date</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {reconResult.missingFromDB.map((pos: any, i: number) => {
+                            const isExpanded = expandedMissing.has(i);
+                            const trades = (reconResult.extractedTrades || []).filter((t: any) =>
+                              t.symbol === pos.symbol && t.expiry === pos.expiry
+                            );
+                            return (
+                              <React.Fragment key={i}>
+                                <tr
+                                  className="border-t cursor-pointer hover:bg-muted/50"
+                                  onClick={() => {
+                                    setExpandedMissing(prev => {
+                                      const next = new Set(prev);
+                                      if (next.has(i)) next.delete(i); else next.add(i);
+                                      return next;
+                                    });
+                                  }}
+                                >
+                                  <td className="p-2">
+                                    {isExpanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+                                  </td>
+                                  <td className="p-2 font-medium">{pos.symbol}</td>
+                                  <td className="p-2">
+                                    <Badge variant="outline" className="text-xs">
+                                      {pos.strategyType === 'IRON_CONDOR' ? 'IC' : pos.strategyType === 'LEAPS' ? 'LEAPS' : pos.strategyType === 'COVERED_CALL' ? 'CC' : pos.type === 'PUT' ? 'PCS' : 'CCS'}
+                                    </Badge>
+                                  </td>
+                                  <td className="p-2 font-mono text-xs">
+                                    {pos.shortStrike}{pos.longStrike ? `/${pos.longStrike}` : ''}
+                                    {pos.callShortStrike ? ` | ${pos.callShortStrike}/${pos.callLongStrike}` : ''}
+                                  </td>
+                                  <td className="p-2">{pos.expiry}</td>
+                                  <td className="p-2 text-right">{pos.contracts}</td>
+                                  <td className="p-2 text-right font-mono">${pos.entryCredit?.toFixed(2)}</td>
+                                  <td className="p-2">
+                                    {pos.closedAt ? (
+                                      <Badge variant="secondary" className="text-xs">Closed</Badge>
+                                    ) : (
+                                      <Badge className="text-xs">Open</Badge>
+                                    )}
+                                  </td>
+                                  <td className="p-2 text-xs text-muted-foreground">
+                                    {pos.tradeTime ? new Date(pos.tradeTime).toLocaleDateString() : '—'}
+                                  </td>
+                                </tr>
+                                {isExpanded && trades.length > 0 && (
+                                  <tr>
+                                    <td colSpan={9} className="p-0">
+                                      <div className="bg-muted/30 px-6 py-2 border-t">
+                                        <p className="text-xs font-medium text-muted-foreground mb-1">Extracted Trade Legs:</p>
+                                        <table className="w-full text-xs">
+                                          <thead>
+                                            <tr className="text-muted-foreground">
+                                              <th className="text-left py-1">Type</th>
+                                              <th className="text-left py-1">Strike</th>
+                                              <th className="text-left py-1">Put/Call</th>
+                                              <th className="text-left py-1">Activity</th>
+                                              <th className="text-right py-1">Qty</th>
+                                              <th className="text-right py-1">Price</th>
+                                              <th className="text-right py-1">Amount</th>
+                                              <th className="text-right py-1">Fees</th>
+                                              <th className="text-left py-1">Time</th>
+                                            </tr>
+                                          </thead>
+                                          <tbody>
+                                            {trades.map((t: any, j: number) => (
+                                              <tr key={j} className="border-t border-muted">
+                                                <td className="py-1">{t.activityType}</td>
+                                                <td className="py-1 font-mono">{t.strike}</td>
+                                                <td className="py-1">{t.type}</td>
+                                                <td className="py-1">{t.activityType}</td>
+                                                <td className="py-1 text-right">{t.quantity}</td>
+                                                <td className="py-1 text-right font-mono">${t.tradePrice?.toFixed(2)}</td>
+                                                <td className="py-1 text-right font-mono">${t.amount?.toFixed(2)}</td>
+                                                <td className="py-1 text-right font-mono">${t.fees?.toFixed(2)}</td>
+                                                <td className="py-1">{t.tradeTime || '—'}</td>
+                                              </tr>
+                                            ))}
+                                          </tbody>
+                                        </table>
+                                      </div>
+                                    </td>
+                                  </tr>
+                                )}
+                              </React.Fragment>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+
+                {/* In DB but not in Statement */}
+                {reconResult.inDBNotInStatement && reconResult.inDBNotInStatement.length > 0 && (
+                  <div>
+                    <h4 className="font-semibold mb-2 flex items-center gap-2 text-blue-500">
+                      <AlertTriangle className="h-4 w-4" />
+                      In Database but Not in Statement ({reconResult.inDBNotInStatement.length})
+                    </h4>
+                    <p className="text-xs text-muted-foreground mb-2">
+                      These positions are in your DB for this period but weren't found in the broker statement. They may have been entered incorrectly or belong to a different account/period.
+                    </p>
+                    <div className="border rounded-lg overflow-hidden">
+                      <table className="w-full text-sm">
+                        <thead className="bg-muted">
+                          <tr>
+                            <th className="text-left p-2">Symbol</th>
+                            <th className="text-left p-2">Strategy</th>
+                            <th className="text-left p-2">Strikes</th>
+                            <th className="text-left p-2">Expiry</th>
+                            <th className="text-right p-2">Contracts</th>
+                            <th className="text-right p-2">Entry Credit</th>
+                            <th className="text-left p-2">Status</th>
+                            <th className="text-left p-2">Entry Date</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {reconResult.inDBNotInStatement.map((pos: any, i: number) => (
+                            <tr key={i} className="border-t">
+                              <td className="p-2 font-medium">{pos.symbol}</td>
+                              <td className="p-2">
+                                <Badge variant="outline" className="text-xs">
+                                  {pos.strategyType === 'IRON_CONDOR' ? 'IC' : pos.strategyType === 'LEAPS' ? 'LEAPS' : pos.strategyType === 'COVERED_CALL' ? 'CC' : pos.type === 'PUT' ? 'PCS' : 'CCS'}
+                                </Badge>
+                              </td>
+                              <td className="p-2 font-mono text-xs">
+                                {pos.shortStrike}{pos.longStrike ? `/${pos.longStrike}` : ''}
+                                {pos.callShortStrike ? ` | ${pos.callShortStrike}/${pos.callLongStrike}` : ''}
+                              </td>
+                              <td className="p-2">{pos.expiry ? new Date(pos.expiry).toLocaleDateString() : '—'}</td>
+                              <td className="p-2 text-right">{pos.contracts}</td>
+                              <td className="p-2 text-right font-mono">
+                                {pos.entryCreditCents != null ? `$${(pos.entryCreditCents / 100).toFixed(2)}` : pos.entryDebitCents != null ? `$${(pos.entryDebitCents / 100).toFixed(2)}` : '—'}
+                              </td>
+                              <td className="p-2">
+                                <Badge variant={pos.status === 'closed' ? 'secondary' : 'default'} className="text-xs">
+                                  {pos.status}
+                                </Badge>
+                              </td>
+                              <td className="p-2 text-xs text-muted-foreground">
+                                {pos.entryDt ? new Date(pos.entryDt).toLocaleDateString() : '—'}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+
+                {/* Matched with differences */}
+                {reconResult.matched.filter((m: any) => m.differences.length > 0).length > 0 && (
+                  <div>
+                    <h4 className="font-semibold mb-2 flex items-center gap-2 text-warning">
+                      <AlertTriangle className="h-4 w-4" />
+                      Matched with Differences ({reconResult.matched.filter((m: any) => m.differences.length > 0).length})
+                    </h4>
+                    <p className="text-xs text-muted-foreground mb-2">
+                      Click to see extracted trade legs from the statement.
+                    </p>
+                    <div className="space-y-2">
+                      {reconResult.matched
+                        .filter((m: any) => m.differences.length > 0)
+                        .map((m: any, i: number) => {
+                          const isExpanded = expandedDiffs.has(i);
+                          const trades = (reconResult.extractedTrades || []).filter((t: any) =>
+                            t.symbol === m.statement.symbol && t.expiry === m.statement.expiry
+                          );
+                          return (
+                            <div
+                              key={i}
+                              className="rounded-lg border border-warning/30 bg-warning/5 cursor-pointer"
+                              onClick={() => {
+                                setExpandedDiffs(prev => {
+                                  const next = new Set(prev);
+                                  if (next.has(i)) next.delete(i); else next.add(i);
+                                  return next;
+                                });
+                              }}
+                            >
+                              <div className="p-3">
+                                <div className="flex items-center gap-2 mb-1">
+                                  {isExpanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+                                  <span className="font-medium">{m.statement.symbol}</span>
+                                  <span className="text-sm text-muted-foreground">
+                                    {m.statement.type} {m.statement.shortStrike}/{m.statement.longStrike}
+                                  </span>
+                                  <span className="text-sm text-muted-foreground">exp {m.statement.expiry}</span>
+                                </div>
+                                <ul className="text-sm space-y-0.5 ml-5">
+                                  {m.differences.map((diff: string, j: number) => (
+                                    <li key={j} className="text-warning">- {diff}</li>
+                                  ))}
+                                </ul>
+                              </div>
+                              {isExpanded && trades.length > 0 && (
+                                <div className="bg-muted/30 px-4 py-2 border-t border-warning/20 rounded-b-lg">
+                                  <p className="text-xs font-medium text-muted-foreground mb-1">Extracted Trade Legs:</p>
+                                  <table className="w-full text-xs">
+                                    <thead>
+                                      <tr className="text-muted-foreground">
+                                        <th className="text-left py-1">Type</th>
+                                        <th className="text-left py-1">Strike</th>
+                                        <th className="text-left py-1">Put/Call</th>
+                                        <th className="text-left py-1">Activity</th>
+                                        <th className="text-right py-1">Qty</th>
+                                        <th className="text-right py-1">Price</th>
+                                        <th className="text-right py-1">Amount</th>
+                                        <th className="text-right py-1">Fees</th>
+                                        <th className="text-left py-1">Time</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {trades.map((t: any, j: number) => (
+                                        <tr key={j} className="border-t border-muted">
+                                          <td className="py-1">{t.activityType}</td>
+                                          <td className="py-1 font-mono">{t.strike}</td>
+                                          <td className="py-1">{t.type}</td>
+                                          <td className="py-1">{t.activityType}</td>
+                                          <td className="py-1 text-right">{t.quantity}</td>
+                                          <td className="py-1 text-right font-mono">${t.tradePrice?.toFixed(2)}</td>
+                                          <td className="py-1 text-right font-mono">${t.amount?.toFixed(2)}</td>
+                                          <td className="py-1 text-right font-mono">${t.fees?.toFixed(2)}</td>
+                                          <td className="py-1">{t.tradeTime || '—'}</td>
+                                        </tr>
+                                      ))}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                    </div>
+                  </div>
+                )}
+
+                {/* Successfully matched */}
+                {reconResult.matched.filter((m: any) => m.differences.length === 0).length > 0 && (
+                  <div>
+                    <h4 className="font-semibold mb-2 flex items-center gap-2 text-success">
+                      <CheckCircle2 className="h-4 w-4" />
+                      Matched ({reconResult.matched.filter((m: any) => m.differences.length === 0).length})
+                    </h4>
+                    <div className="border rounded-lg overflow-hidden">
+                      <table className="w-full text-sm">
+                        <thead className="bg-muted">
+                          <tr>
+                            <th className="text-left p-2">Symbol</th>
+                            <th className="text-left p-2">Strategy</th>
+                            <th className="text-left p-2">Strikes</th>
+                            <th className="text-left p-2">Expiry</th>
+                            <th className="text-right p-2">Contracts</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {reconResult.matched
+                            .filter((m: any) => m.differences.length === 0)
+                            .map((m: any, i: number) => (
+                              <tr key={i} className="border-t">
+                                <td className="p-2 font-medium">{m.statement.symbol}</td>
+                                <td className="p-2">
+                                  <Badge variant="outline" className="text-xs">
+                                    {m.statement.strategyType === 'IRON_CONDOR' ? 'IC' : m.statement.strategyType === 'LEAPS' ? 'LEAPS' : m.statement.type === 'PUT' ? 'PCS' : 'CCS'}
+                                  </Badge>
+                                </td>
+                                <td className="p-2 font-mono text-xs">
+                                  {m.statement.shortStrike}{m.statement.longStrike ? `/${m.statement.longStrike}` : ''}
+                                </td>
+                                <td className="p-2">{m.statement.expiry}</td>
+                                <td className="p-2 text-right">{m.statement.contracts}</td>
+                              </tr>
+                            ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Portfolio Dialog */}
       <Dialog open={portfolioDialogOpen} onOpenChange={setPortfolioDialogOpen}>

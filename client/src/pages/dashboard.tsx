@@ -20,6 +20,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Tooltip,
@@ -48,6 +49,7 @@ export default function Dashboard() {
   const [monthFilter, setMonthFilter] = useState<string>("all");
   const [includeLeaps, setIncludeLeaps] = useState(true);
   const [strategyFilter, setStrategyFilter] = useState<string | null>(null);
+  const [symbolSearch, setSymbolSearch] = useState("");
   const { isAuthenticated } = useAuth();
 
   const { data: stats, isLoading: statsLoading, refetch: refetchStats } = useQuery<Stats>({
@@ -326,9 +328,11 @@ export default function Dashboard() {
     return buckets;
   }, [closedWithExit]);
 
-  const filteredClosedWithExit = strategyFilter
-    ? closedWithExit.filter(p => getStrategyBucket(p) === strategyFilter)
-    : closedWithExit;
+  const filteredClosedWithExit = closedWithExit.filter(p => {
+    if (strategyFilter && getStrategyBucket(p) !== strategyFilter) return false;
+    if (symbolSearch && !p.symbol.toLowerCase().includes(symbolSearch.toLowerCase())) return false;
+    return true;
+  });
 
   const filteredWinners = filteredClosedWithExit.filter(isWinner);
   const filteredLosers = filteredClosedWithExit.filter(isLoser);
@@ -611,14 +615,22 @@ export default function Dashboard() {
       {!positionsLoading && closedWithExit.length > 0 && (
         <Card className="mb-8">
           <CardHeader className="pb-4">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between gap-2">
               <CardTitle className="text-lg sm:text-xl font-semibold">Performance Summary</CardTitle>
-              {strategyFilter && (
-                <Button variant="ghost" size="sm" className="text-xs gap-1" onClick={() => setStrategyFilter(null)}>
-                  <XCircle size={14} />
-                  Clear {strategyFilter} filter
-                </Button>
-              )}
+              <div className="flex items-center gap-2">
+                <Input
+                  placeholder="Filter symbol..."
+                  value={symbolSearch}
+                  onChange={(e) => setSymbolSearch(e.target.value)}
+                  className="w-[110px] sm:w-[140px] text-xs sm:text-sm"
+                />
+                {(strategyFilter || symbolSearch) && (
+                  <Button variant="ghost" size="sm" className="text-xs gap-1" onClick={() => { setStrategyFilter(null); setSymbolSearch(""); }}>
+                    <XCircle size={14} />
+                    Clear
+                  </Button>
+                )}
+              </div>
             </div>
           </CardHeader>
           <CardContent>
@@ -949,93 +961,7 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* Active Alerts */}
-      {activeAlerts.length > 0 && (
-        <div className="mb-8">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg sm:text-xl font-semibold">Alerts Requiring Action</h3>
-            <Link href="/alerts" className="text-sm text-primary hover:underline" data-testid="link-view-all-alerts">
-              View all {alerts?.length || 0} alerts →
-            </Link>
-          </div>
-
-          <div className="space-y-3">
-            {activeAlerts.slice(0, 3).map((alert) => {
-              const position = allPositions?.find((p) => p.id === alert.positionId);
-              if (!position) return null;
-
-              const dte = calculateDTE(position.expiry);
-
-              return (
-                <Card
-                  key={alert.id}
-                  className={`${
-                    alert.type === "tp50" 
-                      ? "border-success/50" 
-                      : alert.type === "dte21"
-                        ? "border-warning/50"
-                        : "border-destructive/50"
-                  }`}
-                  data-testid={`alert-${alert.id}`}
-                >
-                  <CardContent className="p-4">
-                    <div className="flex items-start gap-4">
-                      <div
-                        className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 ${
-                          alert.type === "tp50" 
-                            ? "bg-success/20" 
-                            : alert.type === "dte21"
-                              ? "bg-warning/20"
-                              : "bg-destructive/20"
-                        }`}
-                      >
-                        {alert.type === "tp50" ? (
-                          <CheckCircle className="text-success" size={20} />
-                        ) : alert.type === "dte21" ? (
-                          <Clock className="text-warning" size={20} />
-                        ) : (
-                          <AlertTriangle className="text-destructive" size={20} />
-                        )}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex flex-wrap items-center gap-2 mb-1">
-                          <span className="font-semibold text-lg">{position.symbol}</span>
-                          <span className="text-muted-foreground">•</span>
-                          <span className="text-sm text-muted-foreground">
-                            {position.type} {position.shortStrike}/{position.longStrike}
-                          </span>
-                          <Badge
-                            variant={alert.type === "tp50" ? "default" : alert.type === "dte21" ? "secondary" : "destructive"}
-                            className="text-xs"
-                          >
-                            {alert.type === "tp50" ? "Take Profit" : alert.type === "dte21" ? `${dte} DTE` : "Stop Loss"}
-                          </Badge>
-                        </div>
-                        <p className="text-sm text-muted-foreground mb-2">
-                          Entry: <span className="font-medium">${((position.entryCreditCents || 0) / 100).toFixed(2)}</span>
-                          {alert.currentMidCents && (
-                            <>
-                              {" • "}Current: <span className={`font-medium ${alert.type === "tp50" ? "text-success" : alert.type === "sl2x" ? "text-destructive" : ""}`}>
-                                ${(alert.currentMidCents / 100).toFixed(2)}
-                              </span>
-                            </>
-                          )}
-                          {" • "}Expiry: <span className="font-medium">{format(new Date(position.expiry), 'MMM dd, yyyy')}</span>
-                        </p>
-                        <p className="text-sm">
-                          {alert.type === "tp50" && "Consider closing position to lock in 50%+ profit"}
-                          {alert.type === "dte21" && "Position approaching expiration - review management strategy"}
-                          {alert.type === "sl2x" && "Position hit 2x stop loss - consider closing to limit losses"}
-                        </p>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              );
-            })}
-          </div>
-        </div>
-      )}
+      {/* Active Alerts - removed, available on dedicated /alerts page */}
 
       {/* Empty State */}
       {!positionsLoading && closedWithExit.length === 0 && openPositions.length === 0 && (
