@@ -171,6 +171,7 @@ export default function AddTradeModal({ open, onOpenChange, status = "open", ini
           portfolioId: data.portfolioId,
           contracts: data.contracts,
           type: actualType,
+          ...(isCoveredCallType && { strategyType: "COVERED_CALL" }),
           shortStrike: data.shortStrike,
           longStrike: actualLongStrike,
           expiry: new Date(data.expiry),

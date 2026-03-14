@@ -337,17 +337,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // For Tiger positions, use their unrealized PL and market value
         const pnlCents = pos.tigerUnrealizedPlCents || 0;
 
-        // Tiger's marketValue is total position value (e.g., -$502 for 1 contract)
-        // Convert to per-share price by dividing by 100 (since 1 contract = 100 shares)
-        // So -50200 cents = -$502 total → $5.02 per share
+        // Tiger's marketValue is total position value across all contracts (e.g., -$2008 for 4 contracts)
+        // Convert to per-contract price: divide by 100 (shares per contract) and by number of contracts
+        const contracts = pos.contracts || 1;
         const currentCostCents = pos.tigerMarketValueCents !== null
-          ? Math.abs(pos.tigerMarketValueCents) / 100  // Divide by 100 to get per-share price
+          ? Math.round(Math.abs(pos.tigerMarketValueCents) / 100 / contracts)
           : null;
 
         // Calculate percentage based on strategy type
         // Tiger's pnlCents is for the TOTAL position (all contracts)
         // Entry credit/debit is per contract, so multiply by contracts
-        const contracts = pos.contracts || 1;
         let pnlPercent = 0;
         if (pos.strategyType === 'LEAPS') {
           const totalEntryDebitCents = (pos.entryDebitCents || 0) * contracts;
@@ -518,7 +517,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           };
         } else {
           // Covered call: single-leg short call linked to a LEAPS (no long leg)
-          const isCoveredCall = !!pos.linkedPositionId && (!pos.longStrike || pos.longStrike === pos.shortStrike);
+          const isCoveredCall = pos.strategyType === 'COVERED_CALL' || (!!pos.linkedPositionId && (!pos.longStrike || pos.longStrike === pos.shortStrike));
           if (isCoveredCall) {
             const shortLeg = chain.find(opt =>
               opt.type === 'call' &&
@@ -627,7 +626,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const pmccPremiumMap = new Map<string, number>();
       const pnlByPositionId = new Map(allResults.map((r: any) => [r.positionId, r]));
       for (const pos of positions) {
-        if (pos.linkedPositionId && pos.strategyType === 'CREDIT_SPREAD' && pos.type === 'CALL') {
+        if (pos.strategyType === 'COVERED_CALL') {
           const pnlResult = pnlByPositionId.get(pos.id);
           if (pnlResult?.pnlCents !== null && pnlResult?.pnlCents !== undefined) {
             // Tiger: pnlCents is already the total across all contracts
@@ -958,10 +957,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Map positions to our schema
       const mappedPositions = tigerPositionMapper.mapPositions(tigerResponse.positions || []);
 
-      // Get existing Tiger positions in the Tiger portfolio to update them
-      // We only want to update positions that were previously synced from Tiger
+      // Get ALL open positions to match against (not just Tiger-sourced ones)
+      // This prevents duplicates when a position was manually created before syncing
       const allPositions = await storage.getPositions(user.id, 'open');
-      const tigerPositions = allPositions.filter(p => p.portfolioId === tigerPortfolio.id || p.dataSource === 'tiger');
+      const tigerPositions = allPositions;
 
       console.log(`📊 Found ${tigerPositions.length} existing Tiger positions in DB`);
       if (tigerPositions.length > 0) {

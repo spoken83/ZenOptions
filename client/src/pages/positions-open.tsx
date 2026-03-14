@@ -6,6 +6,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { PageSEO } from "@/components/seo/PageSEO";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
   Table,
@@ -107,6 +108,7 @@ export default function PositionsOpen() {
   const [accountFilter, setAccountFilter] = useState<string>("all");
   const [strategyFilter, setStrategyFilter] = useState<string>("all");
   const [zenStatusFilter, setZenStatusFilter] = useState<string>("all");
+  const [symbolFilter, setSymbolFilter] = useState("");
   const [sortByDTE, setSortByDTE] = useState<"asc" | "desc" | null>("asc");
   const [sortBySymbol, setSortBySymbol] = useState<"asc" | "desc" | null>(null);
   const [duplicateInitialValues, setDuplicateInitialValues] = useState<any>(null);
@@ -362,9 +364,15 @@ export default function PositionsOpen() {
   const filterByStrategy = (positionsList: Position[]) => {
     if (strategyFilter === "all") return positionsList;
     if (strategyFilter === "iron_condor") return positionsList.filter(p => p.strategyType === "IRON_CONDOR");
-    if (strategyFilter === "call_spread") return positionsList.filter(p => p.type === "CALL" && p.strategyType !== "IRON_CONDOR" && p.strategyType !== "LEAPS");
+    if (strategyFilter === "covered_call") return positionsList.filter(p => p.strategyType === "COVERED_CALL");
+    if (strategyFilter === "call_spread") return positionsList.filter(p => p.type === "CALL" && p.strategyType !== "IRON_CONDOR" && p.strategyType !== "LEAPS" && p.strategyType !== "COVERED_CALL");
     if (strategyFilter === "put_spread") return positionsList.filter(p => p.type === "PUT" && p.strategyType !== "IRON_CONDOR" && p.strategyType !== "LEAPS");
     return positionsList;
+  };
+
+  const filterBySymbol = (positionsList: Position[]) => {
+    if (!symbolFilter) return positionsList;
+    return positionsList.filter(p => p.symbol.toLowerCase().includes(symbolFilter.toLowerCase()));
   };
 
   const filterByZenStatus = (positionsList: Position[]) => {
@@ -383,15 +391,15 @@ export default function PositionsOpen() {
 
   // Track if user has ANY positions (before filtering) to differentiate empty states
   const hasAnyPositions = (positions || []).length > 0;
-  const hasActiveFilters = strategyFilter !== "all" || zenStatusFilter !== "all" || accountFilter !== "all";
+  const hasActiveFilters = strategyFilter !== "all" || zenStatusFilter !== "all" || accountFilter !== "all" || symbolFilter !== "";
   
   // Separate LEAPS positions from credit spreads and iron condors FIRST, then apply filters separately
   const filteredByAccountPositions = filterByAccount(positions || []);
   
-  // LEAPS positions - affected by zenStatus filter, account filter and sorting
-  const openLeapsPositions = sortBySymbolIfNeeded(sortByDTEIfNeeded(filterByZenStatus(
+  // LEAPS positions - affected by zenStatus filter, symbol filter, account filter and sorting
+  const openLeapsPositions = sortBySymbolIfNeeded(sortByDTEIfNeeded(filterBySymbol(filterByZenStatus(
     filteredByAccountPositions.filter(p => p.strategyType === "LEAPS")
-  )));
+  ))));
   
   // Get all positions that are linked to a LEAPS (for PMCC display)
   const linkedPositionIds = new Set(
@@ -406,9 +414,9 @@ export default function PositionsOpen() {
   };
   
   // CS & IC positions - exclude linked positions (they show under their parent LEAPS)
-  const openPositions = sortBySymbolIfNeeded(sortByDTEIfNeeded(filterByZenStatus(filterByStrategy(
+  const openPositions = sortBySymbolIfNeeded(sortByDTEIfNeeded(filterBySymbol(filterByZenStatus(filterByStrategy(
     filteredByAccountPositions.filter(p => p.strategyType !== "LEAPS" && !p.linkedPositionId)
-  ))))
+  )))))
   
   // Check if filters resulted in no matches (has positions but filtered out)
   const filtersResultedInNoMatches = hasAnyPositions && hasActiveFilters && openPositions.length === 0 && openLeapsPositions.length === 0;
@@ -768,6 +776,12 @@ export default function PositionsOpen() {
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
               <h3 className="text-lg sm:text-xl font-semibold">Credit Strategies ({openPositions.length})</h3>
               <div className="flex gap-2 flex-wrap">
+                <Input
+                  placeholder="Filter symbol..."
+                  value={symbolFilter}
+                  onChange={(e) => setSymbolFilter(e.target.value)}
+                  className="w-[110px] sm:w-[140px] text-xs sm:text-sm"
+                />
                 <Select value={strategyFilter} onValueChange={setStrategyFilter}>
                   <SelectTrigger className="w-[130px] sm:w-[160px] text-xs sm:text-sm" data-testid="select-strategy-filter">
                     <SelectValue placeholder="Strategy" />
@@ -815,6 +829,7 @@ export default function PositionsOpen() {
                   variant="outline" 
                   size="sm"
                   onClick={() => {
+                    setSymbolFilter("");
                     setStrategyFilter("all");
                     setZenStatusFilter("all");
                     setAccountFilter("all");

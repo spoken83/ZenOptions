@@ -106,7 +106,7 @@ export const positions = pgTable("positions", {
   portfolioId: varchar("portfolio_id").references(() => portfolios.id),
   symbol: text("symbol").notNull(),
   contracts: integer("contracts").notNull().default(1), // Number of contracts
-  strategyType: text("strategy_type").notNull().default("CREDIT_SPREAD"), // 'CREDIT_SPREAD', 'IRON_CONDOR', or 'LEAPS'
+  strategyType: text("strategy_type").notNull().default("CREDIT_SPREAD"), // 'CREDIT_SPREAD', 'IRON_CONDOR', 'LEAPS', or 'COVERED_CALL'
   shortStrike: real("short_strike").notNull(), // For credit spread, this is the short strike. For IC, this is the PUT short strike. For LEAPS, this is the strike
   longStrike: real("long_strike"), // For credit spread, this is the long strike. For IC, this is the PUT long strike. NULL for LEAPS
   type: text("type").notNull(), // For CREDIT_SPREAD: 'PUT' or 'CALL'. For IRON_CONDOR: always 'PUT' (but has call strikes too). For LEAPS: 'CALL'

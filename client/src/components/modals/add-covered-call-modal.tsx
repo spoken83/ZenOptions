@@ -102,7 +102,7 @@ export default function AddCoveredCallModal({ open, onOpenChange }: AddCoveredCa
       const payload = {
         symbol: selectedLeaps!.symbol,
         portfolioId: data.portfolioId,
-        strategyType: "CREDIT_SPREAD",
+        strategyType: "COVERED_CALL",
         type: "CALL",
         shortStrike: data.strike,
         longStrike: null,

@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { RefreshCw, TrendingUp, TrendingDown, AlertTriangle, CheckCircle, Clock, DollarSign, Target, Calendar, BarChart, PieChart, LineChart, Trophy, XCircle, Hash, Flame } from "lucide-react";
+import { RefreshCw, TrendingUp, TrendingDown, AlertTriangle, CheckCircle, Clock, DollarSign, Target, Calendar, BarChart, PieChart, LineChart, Trophy, XCircle, Flame, Wallet, Info } from "lucide-react";
 import { PageSEO } from "@/components/seo/PageSEO";
 import { Button } from "@/components/ui/button";
 import {
@@ -20,6 +20,13 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { Link } from "wouter";
 import { useAuth } from "@/hooks/useAuth";
 import type { Stats } from "@/lib/types";
@@ -39,6 +46,8 @@ interface TickerStats {
 export default function Dashboard() {
   const [accountFilter, setAccountFilter] = useState<string>("all");
   const [monthFilter, setMonthFilter] = useState<string>("all");
+  const [includeLeaps, setIncludeLeaps] = useState(true);
+  const [strategyFilter, setStrategyFilter] = useState<string | null>(null);
   const { isAuthenticated } = useAuth();
 
   const { data: stats, isLoading: statsLoading, refetch: refetchStats } = useQuery<Stats>({
@@ -122,9 +131,14 @@ export default function Dashboard() {
   });
 
   const calculatePositionPL = (p: Position) => {
-    if (p.exitCreditCents === null || p.exitCreditCents === undefined) return null;
-    const contracts = p.contracts || 1;
     const isLeaps = p.strategyType === "LEAPS";
+    // Non-LEAPS: NULL exit on a closed position means expired worthless (exit at $0)
+    // LEAPS: NULL exit means unknown — can't calculate P/L
+    if (p.exitCreditCents === null || p.exitCreditCents === undefined) {
+      if (isLeaps) return null;
+      if (p.status !== "closed") return null;
+    }
+    const contracts = p.contracts || 1;
     const entryCents = isLeaps ? (p.entryDebitCents || 0) : (p.entryCreditCents || 0);
     const exitCents = p.exitCreditCents || 0;
     // entryCreditCents/exitCreditCents store raw contract price in cents ($x.xx = xxx cents)
@@ -143,7 +157,11 @@ export default function Dashboard() {
     return pl !== null && pl < 0;
   };
 
-  const closedWithExit = closedPositions.filter(p => p.exitCreditCents !== null && p.exitCreditCents !== undefined);
+  const closedWithExit = closedPositions.filter(p => {
+    // Non-LEAPS closed with NULL exit = expired worthless (full profit)
+    if (p.strategyType !== "LEAPS" && p.status === "closed") return true;
+    return p.exitCreditCents !== null && p.exitCreditCents !== undefined;
+  });
   const winners = closedWithExit.filter(isWinner);
   const losers = closedWithExit.filter(isLoser);
   const breakeven = closedWithExit.filter(p => {
@@ -201,6 +219,46 @@ export default function Dashboard() {
     return totalPL / 100;
   };
 
+  const DEPOSITS = 50_000;
+  const WITHDRAWALS = 0;
+  const STOCK_HOLDINGS = 0;
+
+  const calculateLeapsMarketValue = () => {
+    if (!pnlData || openPositions.length === 0) return 0;
+    const leapsPositions = openPositions.filter(p => p.strategyType === "LEAPS");
+    const totalCents = leapsPositions.reduce((total, position) => {
+      const pnl = pnlData.positions.find(p => p.positionId === position.id);
+      if (pnl && pnl.currentCostCents !== null) {
+        const contracts = position.contracts || 1;
+        return total + pnl.currentCostCents * 100 * contracts;
+      }
+      return total;
+    }, 0);
+    return totalCents / 100;
+  };
+
+  const calculateUnrealizedOptionsPL = () => {
+    if (!pnlData || openPositions.length === 0) return 0;
+    const nonLeapsPositions = openPositions.filter(p => p.strategyType !== "LEAPS");
+    const totalCents = nonLeapsPositions.reduce((total, position) => {
+      const pnl = pnlData.positions.find(p => p.positionId === position.id);
+      if (pnl && pnl.pnlCents !== null) {
+        const contracts = position.contracts || 1;
+        const portfolio = portfolios?.find(p => p.id === position.portfolioId);
+        const dataSource = portfolio?.isExternal ? 'tiger' : 'manual';
+        const positionPL = dataSource === 'tiger' ? pnl.pnlCents : pnl.pnlCents * 100 * contracts;
+        return total + positionPL;
+      }
+      return total;
+    }, 0);
+    return totalCents / 100;
+  };
+
+  const leapsMarketValue = calculateLeapsMarketValue();
+  const unrealizedOptionsPL = calculateUnrealizedOptionsPL();
+  const netAccountValue = DEPOSITS - WITHDRAWALS + (realizedPL / 100)
+    + (includeLeaps ? leapsMarketValue : 0) + unrealizedOptionsPL + STOCK_HOLDINGS;
+
   const tickerAnalytics = useMemo((): TickerStats[] => {
     const statsMap = new Map<string, TickerStats>();
     
@@ -234,6 +292,76 @@ export default function Dashboard() {
     
     return Array.from(statsMap.values());
   }, [closedWithExit]);
+
+  const getStrategyBucket = (p: Position): string | null => {
+    const entry = new Date(p.entryDt);
+    const expiry = new Date(p.expiry);
+    const dte = Math.ceil((expiry.getTime() - entry.getTime()) / (1000 * 60 * 60 * 24));
+
+    if (p.strategyType === "LEAPS") return "LEAPS";
+    if (p.strategyType === "COVERED_CALL") return "Covered Calls";
+    if (dte <= 1) return "0DTE";
+    if (dte >= 38 && dte <= 55) return "45DTE";
+    return null;
+  };
+
+  const strategyBreakdown = useMemo(() => {
+    const buckets = {
+      '0DTE': { trades: 0, pl: 0, wins: 0 },
+      '45DTE': { trades: 0, pl: 0, wins: 0 },
+      'Covered Calls': { trades: 0, pl: 0, wins: 0 },
+      'LEAPS': { trades: 0, pl: 0, wins: 0 },
+    };
+
+    closedWithExit.forEach(p => {
+      const pl = calculatePositionPL(p) || 0;
+      const bucket = getStrategyBucket(p);
+      if (bucket && bucket in buckets) {
+        buckets[bucket as keyof typeof buckets].trades += 1;
+        buckets[bucket as keyof typeof buckets].pl += pl;
+        if (pl > 0) buckets[bucket as keyof typeof buckets].wins += 1;
+      }
+    });
+
+    return buckets;
+  }, [closedWithExit]);
+
+  const filteredClosedWithExit = strategyFilter
+    ? closedWithExit.filter(p => getStrategyBucket(p) === strategyFilter)
+    : closedWithExit;
+
+  const filteredWinners = filteredClosedWithExit.filter(isWinner);
+  const filteredLosers = filteredClosedWithExit.filter(isLoser);
+  const filteredWinRate = filteredClosedWithExit.length > 0 ? (filteredWinners.length / filteredClosedWithExit.length) * 100 : 0;
+  const filteredRealizedPL = filteredClosedWithExit.reduce((total, p) => total + (calculatePositionPL(p) || 0), 0);
+
+  const filteredAvgWin = (() => {
+    if (filteredWinners.length === 0) return { avgPL: 0, avgPercent: 0 };
+    const totalWinPL = filteredWinners.reduce((total, p) => total + (calculatePositionPL(p) || 0), 0);
+    const totalWinPercent = filteredWinners.reduce((total, p) => {
+      const isLeaps = p.strategyType === "LEAPS";
+      const entryCents = isLeaps ? (p.entryDebitCents || 0) : (p.entryCreditCents || 0);
+      if (entryCents === 0) return total;
+      const pl = calculatePositionPL(p) || 0;
+      const entryValueCents = entryCents * 100 * (p.contracts || 1);
+      return total + ((pl / entryValueCents) * 100);
+    }, 0);
+    return { avgPL: totalWinPL / filteredWinners.length, avgPercent: totalWinPercent / filteredWinners.length };
+  })();
+
+  const filteredAvgLoss = (() => {
+    if (filteredLosers.length === 0) return { avgPL: 0, avgPercent: 0 };
+    const totalLossPL = filteredLosers.reduce((total, p) => total + (calculatePositionPL(p) || 0), 0);
+    const totalLossPercent = filteredLosers.reduce((total, p) => {
+      const isLeaps = p.strategyType === "LEAPS";
+      const entryCents = isLeaps ? (p.entryDebitCents || 0) : (p.entryCreditCents || 0);
+      if (entryCents === 0) return total;
+      const pl = calculatePositionPL(p) || 0;
+      const entryValueCents = entryCents * 100 * (p.contracts || 1);
+      return total + ((pl / entryValueCents) * 100);
+    }, 0);
+    return { avgPL: totalLossPL / filteredLosers.length, avgPercent: totalLossPercent / filteredLosers.length };
+  })();
 
   const topWinners = [...tickerAnalytics].sort((a, b) => b.wins - a.wins).slice(0, 5);
   const topLosers = [...tickerAnalytics].sort((a, b) => b.losses - a.losses).slice(0, 5);
@@ -374,8 +502,76 @@ export default function Dashboard() {
         )}
       </div>
 
-      {/* Key Metrics Grid - Enhanced with Wins/Losses */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-8">
+      {/* Account Value Card */}
+      <Card className="mb-8">
+        <CardContent className="p-4 sm:p-6">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2">
+                <Wallet className="text-primary" size={20} />
+                <p className="text-sm sm:text-base font-medium text-muted-foreground">Account Value</p>
+              </div>
+              <label className="flex items-center gap-1.5 cursor-pointer">
+                <Checkbox
+                  checked={includeLeaps}
+                  onCheckedChange={(checked) => setIncludeLeaps(checked === true)}
+                />
+                <span className="text-xs text-muted-foreground">Include LEAPS</span>
+              </label>
+            </div>
+            <p className={`text-2xl sm:text-3xl font-bold ${netAccountValue >= 0 ? 'text-success' : 'text-destructive'}`} data-testid="text-net-account-value">
+              {positionsLoading ? "-" : `${netAccountValue >= 0 ? '' : '-'}$${formatNumber(Math.abs(netAccountValue), 0)}`}
+            </p>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4 pt-4 border-t">
+            <div>
+              <p className="text-xs text-muted-foreground mb-1">Deposits</p>
+              <p className="text-sm sm:text-base font-semibold">${formatNumber(DEPOSITS, 0)}</p>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground mb-1">Withdrawals</p>
+              <p className="text-sm sm:text-base font-semibold">${formatNumber(WITHDRAWALS, 0)}</p>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground mb-1">Realized P/L</p>
+              <p className={`text-sm sm:text-base font-semibold ${realizedPL >= 0 ? 'text-success' : 'text-destructive'}`} data-testid="text-realized-pl">
+                {positionsLoading ? "-" : formatCurrency(realizedPL, 0)}
+              </p>
+            </div>
+            <div className={includeLeaps ? '' : 'opacity-40'}>
+              <p className="text-xs text-muted-foreground mb-1">LEAPS Mkt Value</p>
+              <p className="text-sm sm:text-base font-semibold" data-testid="text-leaps-value">
+                {positionsLoading ? "-" : `$${formatNumber(leapsMarketValue, 0)}`}
+              </p>
+            </div>
+            <div>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <p className="text-xs text-muted-foreground mb-1 flex items-center gap-1 cursor-help">
+                      Options Unrealized P/L
+                      <Info size={12} />
+                    </p>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>Unrealized P/L from open Credit Spreads, Iron Condors, and Covered Calls</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+              <p className={`text-sm sm:text-base font-semibold ${unrealizedOptionsPL >= 0 ? 'text-success' : 'text-destructive'}`} data-testid="text-options-pl">
+                {positionsLoading ? "-" : `${unrealizedOptionsPL >= 0 ? '+' : '-'}$${formatNumber(Math.abs(unrealizedOptionsPL), 0)}`}
+              </p>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground mb-1">Stock Holdings</p>
+              <p className="text-sm sm:text-base font-semibold">${formatNumber(STOCK_HOLDINGS, 0)}</p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Open Positions */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
         <Card className="bg-card">
           <CardContent className="p-4 sm:p-6">
             <div className="flex items-center justify-between mb-2">
@@ -398,51 +594,6 @@ export default function Dashboard() {
         <Card className="bg-card">
           <CardContent className="p-4 sm:p-6">
             <div className="flex items-center justify-between mb-2">
-              <p className="text-xs sm:text-sm text-muted-foreground">Closed Trades</p>
-              <Hash className="text-muted-foreground" size={18} />
-            </div>
-            <p className="text-xl sm:text-2xl font-bold" data-testid="text-closed-trades">
-              {positionsLoading ? "-" : closedWithExit.length}
-            </p>
-            <p className="text-xs text-muted-foreground mt-1">
-              {monthFilter !== "all" ? format(new Date(monthFilter + "-01"), "MMM yyyy") : "All time"}
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card className="bg-card">
-          <CardContent className="p-4 sm:p-6">
-            <div className="flex items-center justify-between mb-2">
-              <p className="text-xs sm:text-sm text-muted-foreground">Wins</p>
-              <Trophy className="text-success" size={18} />
-            </div>
-            <p className="text-xl sm:text-2xl font-bold text-success" data-testid="text-wins">
-              {positionsLoading ? "-" : winners.length}
-            </p>
-            <p className="text-xs text-muted-foreground mt-1">
-              {closedWithExit.length > 0 ? `${winRate.toFixed(0)}% win rate` : "No trades"}
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card className="bg-card">
-          <CardContent className="p-4 sm:p-6">
-            <div className="flex items-center justify-between mb-2">
-              <p className="text-xs sm:text-sm text-muted-foreground">Losses</p>
-              <XCircle className="text-destructive" size={18} />
-            </div>
-            <p className="text-xl sm:text-2xl font-bold text-destructive" data-testid="text-losses">
-              {positionsLoading ? "-" : losers.length}
-            </p>
-            <p className="text-xs text-muted-foreground mt-1">
-              {closedWithExit.length > 0 ? `${(100 - winRate).toFixed(0)}% loss rate` : "No trades"}
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card className="bg-card">
-          <CardContent className="p-4 sm:p-6">
-            <div className="flex items-center justify-between mb-2">
               <p className="text-xs sm:text-sm text-muted-foreground">Unrealized P/L</p>
               <DollarSign className={unrealizedPL >= 0 ? "text-success" : "text-destructive"} size={18} />
             </div>
@@ -454,72 +605,98 @@ export default function Dashboard() {
             </p>
           </CardContent>
         </Card>
-
-        <Card className="bg-card">
-          <CardContent className="p-4 sm:p-6">
-            <div className="flex items-center justify-between mb-2">
-              <p className="text-xs sm:text-sm text-muted-foreground">Realized P/L</p>
-              <DollarSign className={realizedPL >= 0 ? "text-success" : "text-destructive"} size={18} />
-            </div>
-            <p className={`text-xl sm:text-2xl font-bold ${realizedPL >= 0 ? 'text-success' : 'text-destructive'}`} data-testid="text-realized-pl">
-              {positionsLoading ? "-" : formatCurrency(realizedPL, 0)}
-            </p>
-            <p className="text-xs text-muted-foreground mt-1">
-              {closedWithExit.length} closed
-            </p>
-          </CardContent>
-        </Card>
       </div>
 
       {/* Performance Summary with Closed Trades Table */}
       {!positionsLoading && closedWithExit.length > 0 && (
         <Card className="mb-8">
           <CardHeader className="pb-4">
-            <CardTitle className="text-lg sm:text-xl font-semibold">Performance Summary</CardTitle>
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-lg sm:text-xl font-semibold">Performance Summary</CardTitle>
+              {strategyFilter && (
+                <Button variant="ghost" size="sm" className="text-xs gap-1" onClick={() => setStrategyFilter(null)}>
+                  <XCircle size={14} />
+                  Clear {strategyFilter} filter
+                </Button>
+              )}
+            </div>
           </CardHeader>
           <CardContent>
             {/* Summary Stats Row */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4 mb-6 pb-6 border-b">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-4 mb-6 pb-6 border-b">
               <div>
                 <p className="text-xs sm:text-sm text-muted-foreground mb-1">Total Trades</p>
-                <p className="text-lg sm:text-xl font-bold">{closedWithExit.length}</p>
+                <p className="text-lg sm:text-xl font-bold">{filteredClosedWithExit.length}</p>
+              </div>
+              <div>
+                <p className="text-xs sm:text-sm text-muted-foreground mb-1">Wins / Losses</p>
+                <p className="text-lg sm:text-xl font-bold">
+                  <span className="text-success">{filteredWinners.length}</span>
+                  <span className="text-muted-foreground"> / </span>
+                  <span className="text-destructive">{filteredLosers.length}</span>
+                </p>
               </div>
               <div>
                 <p className="text-xs sm:text-sm text-muted-foreground mb-1">Win Rate</p>
-                <p className={`text-lg sm:text-xl font-bold ${winRate >= 50 ? 'text-success' : 'text-destructive'}`}>
-                  {Math.round(winRate)}%
+                <p className={`text-lg sm:text-xl font-bold ${filteredWinRate >= 50 ? 'text-success' : 'text-destructive'}`}>
+                  {Math.round(filteredWinRate)}%
                 </p>
               </div>
               <div>
                 <p className="text-xs sm:text-sm text-muted-foreground mb-1">Avg Win</p>
                 <p className="text-lg sm:text-xl font-bold text-success">
-                  ${formatNumber(Math.abs(avgWin.avgPL) / 100, 0)}
+                  ${formatNumber(Math.abs(filteredAvgWin.avgPL) / 100, 0)}
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  +{Math.round(avgWin.avgPercent)}%
+                  +{Math.round(filteredAvgWin.avgPercent)}%
                 </p>
               </div>
               <div>
                 <p className="text-xs sm:text-sm text-muted-foreground mb-1">Avg Loss</p>
                 <p className="text-lg sm:text-xl font-bold text-destructive">
-                  ${formatNumber(Math.abs(avgLoss.avgPL) / 100, 0)}
+                  ${formatNumber(Math.abs(filteredAvgLoss.avgPL) / 100, 0)}
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  {Math.round(avgLoss.avgPercent)}%
+                  {Math.round(filteredAvgLoss.avgPercent)}%
                 </p>
               </div>
               <div>
                 <p className="text-xs sm:text-sm text-muted-foreground mb-1">Avg P/L / Trade</p>
-                <p className={`text-lg sm:text-xl font-bold ${realizedPL >= 0 ? 'text-success' : 'text-destructive'}`}>
-                  {formatCurrency(realizedPL / closedWithExit.length, 0)}
+                <p className={`text-lg sm:text-xl font-bold ${filteredRealizedPL >= 0 ? 'text-success' : 'text-destructive'}`}>
+                  {filteredClosedWithExit.length > 0 ? formatCurrency(filteredRealizedPL / filteredClosedWithExit.length, 0) : '$0'}
                 </p>
               </div>
               <div>
                 <p className="text-xs sm:text-sm text-muted-foreground mb-1">Total Realized</p>
-                <p className={`text-lg sm:text-xl font-bold ${realizedPL >= 0 ? 'text-success' : 'text-destructive'}`}>
-                  {formatCurrency(realizedPL, 0)}
+                <p className={`text-lg sm:text-xl font-bold ${filteredRealizedPL >= 0 ? 'text-success' : 'text-destructive'}`}>
+                  {formatCurrency(filteredRealizedPL, 0)}
                 </p>
               </div>
+            </div>
+
+            {/* P/L by Strategy */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6 pb-6 border-b">
+              {(Object.entries(strategyBreakdown) as [string, { trades: number; pl: number; wins: number }][]).map(([name, data]) => (
+                <div
+                  key={name}
+                  className={`rounded-lg border p-3 cursor-pointer transition-colors ${
+                    strategyFilter === name
+                      ? 'border-primary bg-primary/5 ring-1 ring-primary'
+                      : 'hover:border-muted-foreground/50'
+                  }`}
+                  onClick={() => setStrategyFilter(strategyFilter === name ? null : name)}
+                >
+                  <p className="text-xs sm:text-sm text-muted-foreground mb-1">{name}</p>
+                  <p className={`text-lg sm:text-xl font-bold ${data.pl >= 0 ? 'text-success' : 'text-destructive'}`}>
+                    {data.trades > 0 ? formatCurrency(data.pl, 0) : '—'}
+                  </p>
+                  {data.trades > 0 && (
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {data.trades} trades · {Math.round((data.wins / data.trades) * 100)}% WR
+                    </p>
+                  )}
+                </div>
+              ))}
             </div>
 
             {/* Closed Trades Table */}
@@ -541,7 +718,7 @@ export default function Dashboard() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {closedWithExit.slice(0, 10).map((position) => {
+                    {filteredClosedWithExit.slice(0, 10).map((position) => {
                       const pl = calculatePositionPL(position) || 0;
                       const isLeaps = position.strategyType === "LEAPS";
                       const entryCents = isLeaps ? (position.entryDebitCents || 0) : (position.entryCreditCents || 0);
@@ -552,9 +729,13 @@ export default function Dashboard() {
                       
                       // Strategy display
                       const getStrategyLabel = () => {
-                        if (position.strategyType === "IRON_CONDOR") return "IC";
                         if (position.strategyType === "LEAPS") return "LEAPS";
-                        return position.type === "Put" ? "Put Spread" : "Call Spread";
+                        if (position.strategyType === "COVERED_CALL") return "CC";
+                        const bucket = getStrategyBucket(position);
+                        const dtePrefix = bucket === "0DTE" ? "0DTE " : bucket === "45DTE" ? "45DTE " : "";
+                        if (position.strategyType === "IRON_CONDOR") return `${dtePrefix}IC`;
+                        const typeLabel = position.type?.toUpperCase() === "PUT" ? "PCS" : "CCS";
+                        return `${dtePrefix}${typeLabel}`;
                       };
                       
                       // Format strike price - round to whole number for cleaner display
@@ -624,10 +805,10 @@ export default function Dashboard() {
                   </TableBody>
                 </Table>
               </div>
-              {closedWithExit.length > 10 && (
+              {filteredClosedWithExit.length > 10 && (
                 <div className="mt-3 text-center">
                   <Link href="/positions/closed" className="text-sm text-primary hover:underline" data-testid="link-view-all-closed">
-                    View all {closedWithExit.length} closed trades →
+                    View all {filteredClosedWithExit.length} closed trades →
                   </Link>
                 </div>
               )}

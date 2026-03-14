@@ -169,12 +169,12 @@ export class TigerPositionMapper {
                 Math.abs(shortCall.quantity) === qty &&
                 Math.abs(longCall.quantity) === qty) {
               
-              // Calculate total credit
-              const shortPutCredit = Math.abs(shortPut.averageCost) * qty;
-              const longPutDebit = Math.abs(longPut.averageCost) * qty;
-              const shortCallCredit = Math.abs(shortCall.averageCost) * qty;
-              const longCallDebit = Math.abs(longCall.averageCost) * qty;
-              
+              // Calculate per-contract net credit (averageCost is already per-share)
+              const shortPutCredit = Math.abs(shortPut.averageCost);
+              const longPutDebit = Math.abs(longPut.averageCost);
+              const shortCallCredit = Math.abs(shortCall.averageCost);
+              const longCallDebit = Math.abs(longCall.averageCost);
+
               const totalCreditCents = Math.round((shortPutCredit + shortCallCredit - longPutDebit - longCallDebit) * 100);
               
               // Calculate total unrealized PL and market value from Tiger
@@ -237,8 +237,9 @@ export class TigerPositionMapper {
       for (const longPut of longPuts) {
         const qty = Math.abs(shortPut.quantity);
         if (Math.abs(longPut.quantity) === qty) {
-          const shortCredit = Math.abs(shortPut.averageCost) * qty;
-          const longDebit = Math.abs(longPut.averageCost) * qty;
+          // Per-contract net credit (averageCost is already per-share)
+          const shortCredit = Math.abs(shortPut.averageCost);
+          const longDebit = Math.abs(longPut.averageCost);
           const netCreditCents = Math.round((shortCredit - longDebit) * 100);
           
           // Calculate total unrealized PL and market value from Tiger
@@ -281,8 +282,9 @@ export class TigerPositionMapper {
       for (const longCall of longCalls) {
         const qty = Math.abs(shortCall.quantity);
         if (Math.abs(longCall.quantity) === qty) {
-          const shortCredit = Math.abs(shortCall.averageCost) * qty;
-          const longDebit = Math.abs(longCall.averageCost) * qty;
+          // Per-contract net credit (averageCost is already per-share)
+          const shortCredit = Math.abs(shortCall.averageCost);
+          const longDebit = Math.abs(longCall.averageCost);
           const netCreditCents = Math.round((shortCredit - longDebit) * 100);
           
           // Calculate total unrealized PL and market value from Tiger
@@ -347,8 +349,8 @@ export class TigerPositionMapper {
     const longCall = longCalls[0];
     const qty = Math.abs(longCall.quantity);
     
-    // FIX: Multiply by contract count for total debit
-    const debitCents = Math.round(Math.abs(longCall.averageCost) * qty * 100);
+    // Per-contract debit (averageCost is already per-share)
+    const debitCents = Math.round(Math.abs(longCall.averageCost) * 100);
     
     // Get Tiger's unrealized PL and market value
     const tigerUnrealizedPl = longCall.unrealizedPL || 0;

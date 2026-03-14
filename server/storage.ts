@@ -1010,7 +1010,7 @@ export class DatabaseStorage implements IStorage {
     // Verify child position exists and is a short call
     const childPosition = await this.getPosition(userId, positionId);
     if (!childPosition) throw new Error("Position not found");
-    if (childPosition.strategyType !== 'CREDIT_SPREAD' || childPosition.type !== 'CALL') {
+    if ((childPosition.strategyType !== 'CREDIT_SPREAD' && childPosition.strategyType !== 'COVERED_CALL') || childPosition.type !== 'CALL') {
       throw new Error("Only short call spreads can be linked to LEAPS");
     }
     if (childPosition.symbol !== parentLeaps.symbol) {

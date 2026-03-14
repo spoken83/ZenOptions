@@ -316,10 +316,12 @@ export default function PositionsClosed() {
                     let strategyDisplay = "";
                     if (isLeaps) {
                       strategyDisplay = "LEAPS";
+                    } else if (position.strategyType === "COVERED_CALL") {
+                      strategyDisplay = "Covered Call";
                     } else if (isIC) {
                       strategyDisplay = "Iron Condor";
                     } else {
-                      strategyDisplay = `${position.type} Spread`;
+                      strategyDisplay = `${position.type} CS`;
                     }
                     
                     let strikesDisplay = "";
