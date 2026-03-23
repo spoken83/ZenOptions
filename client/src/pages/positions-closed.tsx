@@ -50,6 +50,7 @@ export default function PositionsClosed() {
   const [accountFilter, setAccountFilter] = useState<string>("all");
   const [symbolSearch, setSymbolSearch] = useState("");
   const [closedMonthFilter, setClosedMonthFilter] = useState<string>("all");
+  const [strategyFilter, setStrategyFilter] = useState<string>("all");
   const [isEditCloseOpen, setIsEditCloseOpen] = useState(false);
   const [isEditPositionOpen, setIsEditPositionOpen] = useState(false);
   const [isEditIronCondorOpen, setIsEditIronCondorOpen] = useState(false);
@@ -84,8 +85,34 @@ export default function PositionsClosed() {
     return positionsList.filter(p => p.symbol.toLowerCase().includes(symbolSearch.toLowerCase()));
   };
 
+  // Filter bucket: 0DTE, 45DTE, LEAPS, CC
+  const getFilterBucket = (p: Position): string => {
+    if (p.strategyType === "LEAPS") return "LEAPS";
+    if (p.strategyType === "COVERED_CALL") return "CC";
+    const entry = new Date(p.entryDt);
+    const expiry = new Date(p.expiry);
+    const dte = Math.ceil((expiry.getTime() - entry.getTime()) / (1000 * 60 * 60 * 24));
+    if (dte <= 7) return "0DTE";
+    return "45DTE";
+  };
+
+  // Display label: e.g., "0DTE PCS", "45DTE IC", "LEAPS", "CC"
+  const getStrategyLabel = (p: Position): string => {
+    if (p.strategyType === "LEAPS") return "LEAPS";
+    if (p.strategyType === "COVERED_CALL") return "CC";
+    const bucket = getFilterBucket(p);
+    if (p.strategyType === "IRON_CONDOR") return `${bucket} IC`;
+    const typeLabel = p.type?.toUpperCase() === "PUT" ? "PCS" : "CCS";
+    return `${bucket} ${typeLabel}`;
+  };
+
+  const filterByStrategy = (positionsList: Position[]) => {
+    if (strategyFilter === "all") return positionsList;
+    return positionsList.filter(p => getFilterBucket(p) === strategyFilter);
+  };
+
   const allClosedPositions = filterByAccount(positions || []);
-  const closedPositions = filterBySymbol(filterByClosedMonth(allClosedPositions));
+  const closedPositions = filterByStrategy(filterBySymbol(filterByClosedMonth(allClosedPositions)));
 
   const availableClosedMonths = Array.from(
     new Set(
@@ -94,6 +121,11 @@ export default function PositionsClosed() {
         .map(p => format(new Date(p.closedAt!), "yyyy-MM"))
     )
   ).sort().reverse();
+
+  const strategyOrder = ["0DTE", "45DTE", "CC", "LEAPS"];
+  const availableStrategies = strategyOrder.filter(s =>
+    allClosedPositions.some(p => getFilterBucket(p) === s)
+  );
 
   const getPortfolioName = (portfolioId: string | null) => {
     if (!portfolioId || !portfolios) return "—";
@@ -256,6 +288,17 @@ export default function PositionsClosed() {
                   onChange={(e) => setSymbolSearch(e.target.value)}
                   className="w-[110px] sm:w-[140px] text-xs sm:text-sm"
                 />
+                <Select value={strategyFilter} onValueChange={setStrategyFilter}>
+                  <SelectTrigger className="w-[140px] sm:w-[160px]">
+                    <SelectValue placeholder="All strategies" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Strategies</SelectItem>
+                    {availableStrategies.map((s) => (
+                      <SelectItem key={s} value={s}>{s}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
                 <Select value={closedMonthFilter} onValueChange={setClosedMonthFilter}>
                   <SelectTrigger className="w-[140px] sm:w-[180px]" data-testid="select-closed-month-filter">
                     <SelectValue placeholder="All months" />
@@ -292,6 +335,7 @@ export default function PositionsClosed() {
                     <TableHead>Strategy</TableHead>
                     <TableHead>Strikes</TableHead>
                     <TableHead>Expiry</TableHead>
+                    <TableHead className="text-right">Contracts</TableHead>
                     <TableHead>Closed DTE</TableHead>
                     <TableHead>Entry</TableHead>
                     <TableHead>Exit</TableHead>
@@ -326,16 +370,7 @@ export default function PositionsClosed() {
                     
                     const closedDTE = position.closedAt ? calculateDTE(position.expiry, position.closedAt) : null;
                     
-                    let strategyDisplay = "";
-                    if (isLeaps) {
-                      strategyDisplay = "LEAPS";
-                    } else if (position.strategyType === "COVERED_CALL") {
-                      strategyDisplay = "Covered Call";
-                    } else if (isIC) {
-                      strategyDisplay = "Iron Condor";
-                    } else {
-                      strategyDisplay = `${position.type} CS`;
-                    }
+                    const strategyDisplay = getStrategyLabel(position);
                     
                     let strikesDisplay = "";
                     if (isLeaps) {
@@ -352,6 +387,7 @@ export default function PositionsClosed() {
                         <TableCell className="text-xs">{strategyDisplay}</TableCell>
                         <TableCell className="mono text-xs">{strikesDisplay}</TableCell>
                         <TableCell className="text-sm">{format(toZonedTime(new Date(position.expiry), "America/New_York"), "dd/MM/yyyy")}</TableCell>
+                        <TableCell className="text-right text-sm">{contracts}</TableCell>
                         <TableCell className="mono text-xs font-medium">{closedDTE !== null ? `${closedDTE}d` : "—"}</TableCell>
                         <TableCell style={{ verticalAlign: 'middle' }}>
                           <span className="text-sm font-semibold">{formatCurrencySimple(entryCents / 100)}</span>
@@ -408,7 +444,7 @@ export default function PositionsClosed() {
                     );
                   })}
                   <TableRow className="bg-muted/30 font-semibold border-t-2 border-border">
-                    <TableCell colSpan={7} className="text-right">
+                    <TableCell colSpan={8} className="text-right">
                       Total Realised P/L:
                     </TableCell>
                     <TableCell>

@@ -58,12 +58,13 @@ export class TigerPositionMapper {
       }
 
       // Parse expiry date (format: YYYYMMDD from Tiger)
+      // Use Date.UTC to avoid local timezone shifting the date
       const expiryStr = pos.expiry.toString();
-      const expiry = new Date(
+      const expiry = new Date(Date.UTC(
         parseInt(expiryStr.substring(0, 4)),
         parseInt(expiryStr.substring(4, 6)) - 1,
         parseInt(expiryStr.substring(6, 8))
-      );
+      ));
 
       const key = `${pos.symbol}-${pos.expiry}`;
       

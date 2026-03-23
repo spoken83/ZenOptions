@@ -1,6 +1,7 @@
 import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { RefreshCw, TrendingUp, TrendingDown, AlertTriangle, CheckCircle, Clock, DollarSign, Target, Calendar, BarChart, PieChart, LineChart, Trophy, XCircle, Flame, Wallet, Info } from "lucide-react";
+import { ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, Cell, ReferenceLine, Legend } from "recharts";
 import { PageSEO } from "@/components/seo/PageSEO";
 import { Button } from "@/components/ui/button";
 import {
@@ -30,8 +31,10 @@ import {
 } from "@/components/ui/tooltip";
 import { Link } from "wouter";
 import { useAuth } from "@/hooks/useAuth";
+import { queryClient } from "@/lib/queryClient";
 import type { Stats } from "@/lib/types";
-import type { ScanResult, Alert, Position, Portfolio } from "@shared/schema";
+import type { ScanResult, Alert, Position, Portfolio, CashTransaction } from "@shared/schema";
+import CashTransactionsModal from "@/components/modals/cash-transactions-modal";
 import { format } from "date-fns";
 import { toZonedTime } from "date-fns-tz";
 
@@ -92,6 +95,12 @@ export default function Dashboard() {
     staleTime: 2 * 60 * 1000,
     enabled: !!(allPositions && allPositions.some(p => p.status === "open")),
   });
+
+  const { data: cashTransactionsData } = useQuery<CashTransaction[]>({
+    queryKey: ["/api/cash-transactions"],
+  });
+
+  const [cashModalOpen, setCashModalOpen] = useState(false);
 
   const filterByAccount = (positionsList: Position[]) => {
     if (accountFilter === "all") return positionsList;
@@ -221,8 +230,15 @@ export default function Dashboard() {
     return totalPL / 100;
   };
 
-  const DEPOSITS = 50_000;
-  const WITHDRAWALS = 0;
+  const filteredCashTransactions = (cashTransactionsData || []).filter(t =>
+    accountFilter === "all" || t.portfolioId === accountFilter
+  );
+  const DEPOSITS = filteredCashTransactions
+    .filter(t => t.type === 'deposit')
+    .reduce((sum, t) => sum + t.amountCents, 0) / 100;
+  const WITHDRAWALS = filteredCashTransactions
+    .filter(t => t.type === 'withdrawal')
+    .reduce((sum, t) => sum + t.amountCents, 0) / 100;
   const STOCK_HOLDINGS = 0;
 
   const calculateLeapsMarketValue = () => {
@@ -258,8 +274,27 @@ export default function Dashboard() {
 
   const leapsMarketValue = calculateLeapsMarketValue();
   const unrealizedOptionsPL = calculateUnrealizedOptionsPL();
-  const netAccountValue = DEPOSITS - WITHDRAWALS + (realizedPL / 100)
-    + (includeLeaps ? leapsMarketValue : 0) + unrealizedOptionsPL + STOCK_HOLDINGS;
+
+  // Cost of open LEAPS (debit paid, reduces cash)
+  // entryDebitCents is per-share in cents, × 100 shares/contract × contracts, then /100 for dollars
+  const openLeapsCost = openPositions
+    .filter(p => p.strategyType === "LEAPS")
+    .reduce((sum, p) => sum + (p.entryDebitCents || 0) * (p.contracts || 1), 0);
+
+  // Premiums received from open credit positions (credit spreads, ICs, covered calls)
+  const openCreditPremiums = openPositions
+    .filter(p => p.strategyType !== "LEAPS")
+    .reduce((sum, p) => sum + (p.entryCreditCents || 0) * (p.contracts || 1), 0);
+
+  // Cash balance = deposits - withdrawals + realized P/L - LEAPS cost + credit premiums
+  // openLeapsCost/openCreditPremiums are cents-per-share × contracts; ×100 shares /100 cents = just the value
+  const cashBalance = DEPOSITS - WITHDRAWALS + (realizedPL / 100) - openLeapsCost + openCreditPremiums;
+
+  // Account value = cash + LEAPS market value + unrealized options P/L (which adjusts for current credit position values)
+  const netAccountValue = cashBalance
+    + (includeLeaps ? leapsMarketValue : 0)
+    + unrealizedOptionsPL
+    + STOCK_HOLDINGS;
 
   const tickerAnalytics = useMemo((): TickerStats[] => {
     const statsMap = new Map<string, TickerStats>();
@@ -371,6 +406,87 @@ export default function Dashboard() {
   const topLosers = [...tickerAnalytics].sort((a, b) => b.losses - a.losses).slice(0, 5);
   const mostProfitable = [...tickerAnalytics].sort((a, b) => b.totalPL - a.totalPL).slice(0, 5);
   const mostTraded = [...tickerAnalytics].sort((a, b) => b.totalTrades - a.totalTrades).slice(0, 5);
+
+  // Monthly P&L Report state
+  const [monthlyStrategyFilter, setMonthlyStrategyFilter] = useState<string>("all");
+
+  const getMonthlyBucket = (p: Position): string => {
+    if (p.strategyType === "LEAPS") return "LEAPS";
+    if (p.strategyType === "COVERED_CALL") return "CC";
+    const entry = new Date(p.entryDt);
+    const expiry = new Date(p.expiry);
+    const dte = Math.ceil((expiry.getTime() - entry.getTime()) / (1000 * 60 * 60 * 24));
+    if (dte <= 7) return "0DTE";
+    return "45DTE";
+  };
+
+  const monthlyReport = useMemo(() => {
+    const allClosed = allPositions?.filter(p => p.status === "closed") || [];
+    // Apply filters
+    const filtered = allClosed.filter(p => {
+      if (accountFilter !== "all" && p.portfolioId !== accountFilter) return false;
+      if (monthlyStrategyFilter !== "all" && getMonthlyBucket(p) !== monthlyStrategyFilter) return false;
+      return true;
+    });
+
+    const closedValid = filtered.filter(p => {
+      if (p.strategyType !== "LEAPS" && p.status === "closed") return true;
+      return p.exitCreditCents !== null && p.exitCreditCents !== undefined;
+    });
+
+    const byMonth: Record<string, { pl: number; trades: number; wins: number; losses: number }> = {};
+
+    closedValid.forEach(p => {
+      if (!p.closedAt) return;
+      const monthKey = format(new Date(p.closedAt), "yyyy-MM");
+      if (!byMonth[monthKey]) byMonth[monthKey] = { pl: 0, trades: 0, wins: 0, losses: 0 };
+      const pl = calculatePositionPL(p) || 0;
+      byMonth[monthKey].pl += pl;
+      byMonth[monthKey].trades += 1;
+      if (pl > 0) byMonth[monthKey].wins += 1;
+      if (pl < 0) byMonth[monthKey].losses += 1;
+    });
+
+    // Build per-month deposits/withdrawals
+    const monthlyCashTxs = (cashTransactionsData || []).filter(t =>
+      accountFilter === "all" || t.portfolioId === accountFilter
+    );
+    const cashByMonth: Record<string, number> = {};
+    monthlyCashTxs.forEach(t => {
+      const monthKey = format(new Date(t.date), "yyyy-MM");
+      if (!cashByMonth[monthKey]) cashByMonth[monthKey] = 0;
+      cashByMonth[monthKey] += t.type === 'deposit' ? t.amountCents : -t.amountCents;
+    });
+
+    // Merge all months from P&L and deposits
+    const allMonths = Array.from(new Set([...Object.keys(byMonth), ...Object.keys(cashByMonth)])).sort();
+
+    // Balance = cumulative deposits/withdrawals + cumulative realized P/L
+    let cumulativePL = 0;
+    let cumulativeDeposits = 0;
+    return allMonths.map(month => {
+      const data = byMonth[month] || { pl: 0, trades: 0, wins: 0, losses: 0 };
+      cumulativePL += data.pl;
+      cumulativeDeposits += cashByMonth[month] || 0;
+      return {
+        month,
+        label: format(new Date(month + "-01"), "MMM yyyy"),
+        pl: Math.round(data.pl / 100),
+        cumulative: Math.round(cumulativePL / 100),
+        balance: Math.round((cumulativeDeposits + cumulativePL) / 100),
+        trades: data.trades,
+        wins: data.wins,
+        losses: data.losses,
+        winRate: data.trades > 0 ? Math.round((data.wins / data.trades) * 100) : 0,
+      };
+    });
+  }, [allPositions, cashTransactionsData, monthlyStrategyFilter, accountFilter]);
+
+  const monthlyStrategies = useMemo(() => {
+    const allClosed = allPositions?.filter(p => p.status === "closed") || [];
+    const buckets = new Set(allClosed.map(p => getMonthlyBucket(p)));
+    return ["0DTE", "45DTE", "CC", "LEAPS"].filter(s => buckets.has(s));
+  }, [allPositions]);
 
   const handleRefresh = () => {
     refetchStats();
@@ -530,11 +646,23 @@ export default function Dashboard() {
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4 pt-4 border-t">
             <div>
               <p className="text-xs text-muted-foreground mb-1">Deposits</p>
-              <p className="text-sm sm:text-base font-semibold">${formatNumber(DEPOSITS, 0)}</p>
+              <p
+                className="text-sm sm:text-base font-semibold cursor-pointer hover:text-primary transition-colors"
+                onClick={() => setCashModalOpen(true)}
+                title="Manage deposits & withdrawals"
+              >
+                ${formatNumber(DEPOSITS, 0)}
+              </p>
             </div>
             <div>
               <p className="text-xs text-muted-foreground mb-1">Withdrawals</p>
-              <p className="text-sm sm:text-base font-semibold">${formatNumber(WITHDRAWALS, 0)}</p>
+              <p
+                className="text-sm sm:text-base font-semibold cursor-pointer hover:text-primary transition-colors"
+                onClick={() => setCashModalOpen(true)}
+                title="Manage deposits & withdrawals"
+              >
+                ${formatNumber(WITHDRAWALS, 0)}
+              </p>
             </div>
             <div>
               <p className="text-xs text-muted-foreground mb-1">Realized P/L</p>
@@ -829,6 +957,161 @@ export default function Dashboard() {
         </Card>
       )}
 
+      {/* Monthly P&L Report */}
+      {!positionsLoading && monthlyReport.length > 0 && (
+        <Card className="mb-8">
+          <CardHeader>
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+              <CardTitle className="text-lg">Monthly Realised P&L</CardTitle>
+              <div className="flex flex-wrap items-center gap-2">
+                <Select value={monthlyStrategyFilter} onValueChange={setMonthlyStrategyFilter}>
+                  <SelectTrigger className="w-[130px] text-xs">
+                    <SelectValue placeholder="All Strategies" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Strategies</SelectItem>
+                    {monthlyStrategies.map(s => (
+                      <SelectItem key={s} value={s}>{s}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="h-[280px] mb-6">
+              <ResponsiveContainer width="100%" height="100%">
+                <ComposedChart data={monthlyReport} margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
+                  <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+                  <XAxis dataKey="label" tick={{ fontSize: 11 }} className="fill-muted-foreground" />
+                  <YAxis tick={{ fontSize: 11 }} className="fill-muted-foreground" tickFormatter={(v) => `$${v.toLocaleString()}`} />
+                  <RechartsTooltip
+                    contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px', fontSize: '12px' }}
+                    labelStyle={{ color: 'hsl(var(--foreground))', fontWeight: 600 }}
+                    formatter={(value: number, name: string) => {
+                      const labels: Record<string, string> = { pl: 'Monthly P&L', cumulative: 'Cumulative P&L' };
+                      return [`$${value.toLocaleString()}`, labels[name] || name];
+                    }}
+                  />
+                  <Legend
+                    formatter={(value: string) => {
+                      const labels: Record<string, string> = { pl: 'Monthly P&L', cumulative: 'Cumulative P&L' };
+                      return labels[value] || value;
+                    }}
+                    wrapperStyle={{ fontSize: '12px' }}
+                  />
+                  <ReferenceLine y={0} stroke="hsl(var(--muted-foreground))" strokeDasharray="3 3" />
+                  <Bar dataKey="pl" radius={[4, 4, 0, 0]} label={{ position: 'top', fontSize: 10, fill: 'hsl(var(--muted-foreground))', formatter: (v: number) => v !== 0 ? `$${v >= 1000 || v <= -1000 ? `${(v / 1000).toFixed(1)}k` : v.toLocaleString()}` : '' }}>
+                    {monthlyReport.map((entry, index) => (
+                      <Cell key={index} fill={entry.pl >= 0 ? 'hsl(var(--success))' : 'hsl(var(--destructive))'} />
+                    ))}
+                  </Bar>
+                  <Line type="monotone" dataKey="cumulative" stroke="hsl(var(--primary))" strokeWidth={2} dot={{ r: 3 }} />
+                </ComposedChart>
+              </ResponsiveContainer>
+            </div>
+
+            {/* Monthly summary table */}
+            <div className="border rounded-lg overflow-hidden">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Month</TableHead>
+                    <TableHead className="text-right">Trades</TableHead>
+                    <TableHead className="text-right">Wins</TableHead>
+                    <TableHead className="text-right">Losses</TableHead>
+                    <TableHead className="text-right">Win Rate</TableHead>
+                    <TableHead className="text-right">P&L</TableHead>
+                    <TableHead className="text-right">Cumulative P&L</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {monthlyReport.map(row => (
+                    <TableRow key={row.month}>
+                      <TableCell className="font-medium text-sm">{row.label}</TableCell>
+                      <TableCell className="text-right text-sm">{row.trades}</TableCell>
+                      <TableCell className="text-right text-sm text-success">{row.wins}</TableCell>
+                      <TableCell className="text-right text-sm text-destructive">{row.losses}</TableCell>
+                      <TableCell className="text-right text-sm">{row.winRate}%</TableCell>
+                      <TableCell className={`text-right text-sm font-semibold ${row.pl >= 0 ? 'text-success' : 'text-destructive'}`}>
+                        {row.pl >= 0 ? '+' : ''}${row.pl.toLocaleString()}
+                      </TableCell>
+                      <TableCell className={`text-right text-sm font-semibold ${row.cumulative >= 0 ? 'text-success' : 'text-destructive'}`}>
+                        {row.cumulative >= 0 ? '+' : ''}${row.cumulative.toLocaleString()}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                  {monthlyReport.length > 1 && (
+                    <TableRow className="bg-muted/30 font-semibold border-t-2">
+                      <TableCell>Total</TableCell>
+                      <TableCell className="text-right">{monthlyReport.reduce((s, r) => s + r.trades, 0)}</TableCell>
+                      <TableCell className="text-right text-success">{monthlyReport.reduce((s, r) => s + r.wins, 0)}</TableCell>
+                      <TableCell className="text-right text-destructive">{monthlyReport.reduce((s, r) => s + r.losses, 0)}</TableCell>
+                      <TableCell className="text-right">
+                        {(() => {
+                          const totalTrades = monthlyReport.reduce((s, r) => s + r.trades, 0);
+                          const totalWins = monthlyReport.reduce((s, r) => s + r.wins, 0);
+                          return totalTrades > 0 ? Math.round((totalWins / totalTrades) * 100) : 0;
+                        })()}%
+                      </TableCell>
+                      {(() => {
+                        const totalPL = monthlyReport.reduce((s, r) => s + r.pl, 0);
+                        return (
+                          <TableCell className={`text-right font-semibold ${totalPL >= 0 ? 'text-success' : 'text-destructive'}`}>
+                            {totalPL >= 0 ? '+' : ''}${totalPL.toLocaleString()}
+                          </TableCell>
+                        );
+                      })()}
+                      {(() => {
+                        const cumTotal = monthlyReport[monthlyReport.length - 1]?.cumulative || 0;
+                        return (
+                          <TableCell className={`text-right font-semibold ${cumTotal >= 0 ? 'text-success' : 'text-destructive'}`}>
+                            {cumTotal >= 0 ? '+' : ''}${cumTotal.toLocaleString()}
+                          </TableCell>
+                        );
+                      })()}
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Monthly Account Balance */}
+      {!positionsLoading && monthlyReport.length > 0 && (
+        <Card className="mb-8">
+          <CardHeader>
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+              <CardTitle className="text-lg">Monthly Account Balance</CardTitle>
+              <p className="text-xs text-muted-foreground">Net Capital = Deposits - Withdrawals + Realized P&L</p>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="h-[280px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <ComposedChart data={monthlyReport} margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
+                  <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+                  <XAxis dataKey="label" tick={{ fontSize: 11 }} className="fill-muted-foreground" />
+                  <YAxis tick={{ fontSize: 11 }} className="fill-muted-foreground" tickFormatter={(v) => `$${(v / 1000).toFixed(0)}k`} />
+                  <RechartsTooltip
+                    contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px', fontSize: '12px' }}
+                    labelStyle={{ color: 'hsl(var(--foreground))', fontWeight: 600 }}
+                    formatter={(value: number) => [`$${value.toLocaleString()}`, 'Account Balance']}
+                  />
+                  <Bar dataKey="balance" radius={[4, 4, 0, 0]} fill="hsl(var(--primary))" label={{ position: 'top', fontSize: 10, fill: 'hsl(var(--muted-foreground))', formatter: (v: number) => `$${(v / 1000).toFixed(1)}k` }}>
+                    {monthlyReport.map((entry, index) => (
+                      <Cell key={index} fill={index === monthlyReport.length - 1 ? 'hsl(var(--primary))' : 'hsl(var(--primary) / 0.6)'} />
+                    ))}
+                  </Bar>
+                </ComposedChart>
+              </ResponsiveContainer>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Ticker Insights Section */}
       {!positionsLoading && tickerAnalytics.length > 0 && (
         <div className="mb-8">
@@ -978,6 +1261,7 @@ export default function Dashboard() {
           </CardContent>
         </Card>
       )}
+      <CashTransactionsModal open={cashModalOpen} onOpenChange={setCashModalOpen} />
     </div>
   );
 }

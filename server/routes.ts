@@ -29,6 +29,7 @@ import alertsRouter from "./routes/alerts";
 import settingsRouter from "./routes/settings";
 import adminRouter from "./routes/admin";
 import reconciliationRouter from "./routes/reconciliation";
+import cashTransactionsRouter from "./routes/cashTransactions";
 
 // Use test key in development, production key in production
 const stripeSecretKey = process.env.NODE_ENV === 'development'
@@ -249,6 +250,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.use(settingsRouter);
   app.use(adminRouter);
   app.use(reconciliationRouter);
+  app.use(cashTransactionsRouter);
 
   // Position routes (pre-login preview enabled)
   app.get("/api/positions", optionalAuth, async (req: any, res) => {
@@ -987,7 +989,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
               console.log(`   ❌ Symbol mismatch: ${existing.symbol} !== ${mappedPos.symbol}`);
               return false;
             }
-            if (existing.expiry?.toISOString().split('T')[0] !== mappedPos.expiry?.toISOString().split('T')[0]) {
+            // Compare expiry dates with 1-day tolerance to handle timezone mismatches
+            // (old Tiger imports used local midnight which shifts the UTC date by a day)
+            const existingTime = existing.expiry?.getTime() || 0;
+            const mappedTime = mappedPos.expiry?.getTime() || 0;
+            const ONE_DAY_MS = 86400000;
+            if (!existingTime || !mappedTime || Math.abs(existingTime - mappedTime) > ONE_DAY_MS) {
               console.log(`   ❌ Expiry mismatch: ${existing.expiry?.toISOString().split('T')[0]} !== ${mappedPos.expiry?.toISOString().split('T')[0]}`);
               return false;
             }

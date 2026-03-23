@@ -299,6 +299,20 @@ export const apiUsage = pgTable("api_usage", {
   dateProviderEndpointUnique: uniqueIndex("api_usage_date_provider_endpoint_unique").on(table.date, table.provider, table.endpoint),
 }));
 
+// Cash transactions (deposits/withdrawals per portfolio)
+export const cashTransactions = pgTable("cash_transactions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id, { onDelete: "cascade" }),
+  portfolioId: varchar("portfolio_id").references(() => portfolios.id),
+  type: text("type").notNull(), // 'deposit' or 'withdrawal'
+  amountCents: integer("amount_cents").notNull(), // stored in cents
+  date: timestamp("date").notNull(),
+  note: text("note"),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+}, (table) => ({
+  userIdIdx: index("cash_transactions_user_id_idx").on(table.userId),
+}));
+
 // Insert schemas
 export const insertWatchlistSchema = createInsertSchema(watchlist).omit({
   id: true,
@@ -366,6 +380,13 @@ export const insertApiUsageSchema = createInsertSchema(apiUsage).omit({
   lastCalledAt: true,
 });
 
+export const insertCashTransactionSchema = createInsertSchema(cashTransactions).omit({
+  id: true,
+  createdAt: true,
+}).extend({
+  date: z.coerce.date(),
+});
+
 // Types
 export type Watchlist = typeof watchlist.$inferSelect;
 export type InsertWatchlist = z.infer<typeof insertWatchlistSchema>;
@@ -402,6 +423,9 @@ export type InsertFeedback = z.infer<typeof insertFeedbackSchema>;
 
 export type ApiUsage = typeof apiUsage.$inferSelect;
 export type InsertApiUsage = z.infer<typeof insertApiUsageSchema>;
+
+export type CashTransaction = typeof cashTransactions.$inferSelect;
+export type InsertCashTransaction = z.infer<typeof insertCashTransactionSchema>;
 
 // Market Context shared types for frontend/backend
 export interface MarketContextTickerSentiment {

@@ -74,7 +74,7 @@ export class ReconciliationService {
 
   async extractTextFromPDF(filePath: string): Promise<string> {
     try {
-      const { stdout } = await execFileAsync('pdftotext', ['-layout', filePath, '-']);
+      const { stdout } = await execFileAsync('/opt/homebrew/bin/pdftotext', ['-layout', filePath, '-']);
       return stdout;
     } catch (error: any) {
       throw new Error(`Failed to extract text from PDF: ${error.message}`);
@@ -263,14 +263,47 @@ export class ReconciliationService {
     // Group trades by symbol and trade time (trades executed at the same time are legs of the same position)
     const tradesByTime: Record<string, StatementTrade[]> = {};
 
+    // First pass: group trades with valid timestamps by time
+    const tradesWithoutTime: StatementTrade[] = [];
     for (const trade of trades) {
-      // Round trade time to the minute for grouping
       const time = trade.tradeTime || '';
+      if (!time || time === '—' || time.length < 10) {
+        tradesWithoutTime.push(trade);
+        continue;
+      }
+      // Round trade time to the minute for grouping
       const timeKey = `${trade.symbol}_${time.substring(0, 16)}_${trade.expiry}`;
       if (!tradesByTime[timeKey]) {
         tradesByTime[timeKey] = [];
       }
       tradesByTime[timeKey].push(trade);
+    }
+
+    // Second pass: attach orphan trades (missing timestamp) to the best matching group
+    for (const orphan of tradesWithoutTime) {
+      // Find a group with the same symbol + expiry that has the complementary leg
+      const isLong = orphan.activityType === 'Open';
+      const isShort = orphan.activityType === 'OpenShort';
+      let bestKey: string | null = null;
+      for (const [key, group] of Object.entries(tradesByTime)) {
+        if (!key.startsWith(`${orphan.symbol}_`) || !key.endsWith(`_${orphan.expiry}`)) continue;
+        const opens = group.filter(t => t.activityType === 'Open' || t.activityType === 'OpenShort');
+        const hasShort = opens.some(t => t.activityType === 'OpenShort' && t.type === orphan.type);
+        const hasLong = opens.some(t => t.activityType === 'Open' && t.type === orphan.type);
+        // Orphan long pairs with existing short, orphan short pairs with existing long
+        if ((isLong && hasShort && !hasLong) || (isShort && hasLong && !hasShort)) {
+          bestKey = key;
+          break;
+        }
+      }
+      if (bestKey) {
+        tradesByTime[bestKey].push(orphan);
+      } else {
+        // No match found — create its own group
+        const timeKey = `${orphan.symbol}_orphan_${orphan.expiry}_${orphan.strike}`;
+        if (!tradesByTime[timeKey]) tradesByTime[timeKey] = [];
+        tradesByTime[timeKey].push(orphan);
+      }
     }
 
     for (const [, group] of Object.entries(tradesByTime)) {
@@ -329,21 +362,22 @@ export class ReconciliationService {
                 totalFees: spreadFees,
                 tradeTime: short.tradeTime,
               });
-            } else if (typedShorts.length === 1 && typedLongs.length === 0) {
-              // Naked short — shouldn't normally happen, but handle gracefully
-              const short = typedShorts[0];
-              positions.push({
-                symbol: short.symbol,
-                expiry: short.expiry,
-                type: optType,
-                shortStrike: short.strike,
-                longStrike: null,
-                strategyType: 'CREDIT_SPREAD',
-                contracts: short.quantity,
-                entryCredit: Math.abs(short.amount) / short.quantity / 100,
-                totalFees: short.fees || 0,
-                tradeTime: short.tradeTime,
-              });
+            } else if (typedShorts.length >= 1 && typedLongs.length === 0) {
+              // Short with no long leg — CALL = Covered Call, PUT = naked short
+              for (const short of typedShorts) {
+                positions.push({
+                  symbol: short.symbol,
+                  expiry: short.expiry,
+                  type: optType,
+                  shortStrike: short.strike,
+                  longStrike: null,
+                  strategyType: optType === 'CALL' ? 'COVERED_CALL' : 'CREDIT_SPREAD',
+                  contracts: short.quantity,
+                  entryCredit: Math.abs(short.amount) / short.quantity / 100,
+                  totalFees: short.fees || 0,
+                  tradeTime: short.tradeTime,
+                });
+              }
             }
           }
         }
@@ -359,16 +393,70 @@ export class ReconciliationService {
           );
           if (matchingPos) {
             matchingPos.closedAt = close.tradeTime;
-            // For closes, accumulate exit credits
+            // For closes, accumulate net exit cost per share
+            // Use raw amount (with sign) so short buyback (+) and long sale (-) net correctly
             if (!matchingPos.exitCredit) matchingPos.exitCredit = 0;
-            if (!matchingPos.realizedPL) matchingPos.realizedPL = 0;
-            matchingPos.realizedPL += close.realizedPL;
+            matchingPos.exitCredit += close.amount / close.quantity / 100;
+            // Compute realized P&L from entry and exit: (credit received - debit to close) * contracts * 100
+            matchingPos.realizedPL = (matchingPos.entryCredit - matchingPos.exitCredit) * matchingPos.contracts * 100;
           }
         }
       }
     }
 
-    return positions;
+    // Merge positions with same symbol/expiry/type/strikes that were split across multiple fills.
+    // Partial fills at different times create separate groups but represent one position.
+    const merged: StatementPosition[] = [];
+    for (const pos of positions) {
+      const existing = merged.find(m =>
+        m.symbol === pos.symbol &&
+        m.expiry === pos.expiry &&
+        m.type === pos.type &&
+        m.shortStrike === pos.shortStrike &&
+        m.longStrike === pos.longStrike &&
+        m.strategyType === pos.strategyType &&
+        !m.closedAt && !pos.closedAt // only merge open fills
+      );
+      if (existing) {
+        // Weighted average entry credit
+        const totalContracts = existing.contracts + pos.contracts;
+        existing.entryCredit = (existing.entryCredit * existing.contracts + pos.entryCredit * pos.contracts) / totalContracts;
+        existing.contracts = totalContracts;
+        existing.totalFees += pos.totalFees;
+        // Keep earliest trade time
+        if (pos.tradeTime < existing.tradeTime) {
+          existing.tradeTime = pos.tradeTime;
+        }
+      } else {
+        merged.push({ ...pos });
+      }
+    }
+
+    // Also merge closed positions (same logic)
+    for (let i = 0; i < merged.length; i++) {
+      if (!merged[i].closedAt) continue;
+      for (let j = i + 1; j < merged.length; j++) {
+        const a = merged[i], b = merged[j];
+        if (b.closedAt && a.symbol === b.symbol && a.expiry === b.expiry &&
+            a.type === b.type && a.shortStrike === b.shortStrike &&
+            a.longStrike === b.longStrike && a.strategyType === b.strategyType) {
+          const totalContracts = a.contracts + b.contracts;
+          a.entryCredit = (a.entryCredit * a.contracts + b.entryCredit * b.contracts) / totalContracts;
+          if (a.exitCredit != null && b.exitCredit != null) {
+            a.exitCredit = (a.exitCredit * a.contracts + b.exitCredit * b.contracts) / totalContracts;
+          }
+          a.contracts = totalContracts;
+          a.totalFees += b.totalFees;
+          if (a.realizedPL != null && b.realizedPL != null) {
+            a.realizedPL = a.realizedPL + b.realizedPL;
+          }
+          merged.splice(j, 1);
+          j--;
+        }
+      }
+    }
+
+    return merged;
   }
 
   private isLikelyLeaps(expiry: string, tradeTime: string): boolean {
@@ -401,13 +489,25 @@ export class ReconciliationService {
       dbPositions = dbPositions.filter(p => p.portfolioId === portfolioId);
     }
 
-    // Filter DB positions to those OPENED during the statement period.
-    // We only match opening trades — the statement's grouped positions represent opens.
-    // Positions opened in a prior period but closed this period were already reconciled
-    // when processing that earlier period's statement.
+    // Match against DB positions that could correspond to statement trades.
+    // Broad pool for matching: open/order positions always included, plus closed positions
+    // where entryDt, closedAt, or expiry overlaps with the statement period.
+    // (Users often enter trades into the DB days/weeks after the actual trade date.)
+    const ONE_MONTH_MS = 31 * 86400000;
     const dbPositionsInPeriod = dbPositions.filter(dbPos => {
+      if (dbPos.status === 'open' || dbPos.status === 'order') return true;
       const entryDate = new Date(dbPos.entryDt);
-      return entryDate >= periodStart && entryDate <= periodEnd;
+      if (entryDate >= periodStart && entryDate <= periodEnd) return true;
+      // Include closed positions where closedAt or expiry is near the period
+      if (dbPos.closedAt) {
+        const closedDate = new Date(dbPos.closedAt);
+        if (closedDate >= periodStart && closedDate.getTime() <= periodEnd.getTime() + ONE_MONTH_MS) return true;
+      }
+      if (dbPos.expiry) {
+        const expiryDate = new Date(dbPos.expiry);
+        if (expiryDate >= periodStart && expiryDate.getTime() <= periodEnd.getTime() + ONE_MONTH_MS) return true;
+      }
+      return false;
     });
 
     const matched: ReconciliationResult['matched'] = [];
@@ -523,7 +623,9 @@ export class ReconciliationService {
         // Regular non-IC match (or IC complement not found)
         const differences = comparePosition(stmtPos, match, stmtPos.totalFees, stmtPos.entryCredit, stmtPos.contracts);
         if (stmtPos.strategyType !== match.strategyType) {
-          const isCCVariant = (match.strategyType === 'COVERED_CALL' || match.linkedPositionId) && stmtPos.strategyType === 'CREDIT_SPREAD';
+          const isCCVariant =
+            ((match.strategyType === 'COVERED_CALL' || match.linkedPositionId) && stmtPos.strategyType === 'CREDIT_SPREAD') ||
+            (stmtPos.strategyType === 'COVERED_CALL' && (match.strategyType === 'CREDIT_SPREAD' || match.strategyType === 'COVERED_CALL'));
           if (!isCCVariant) {
             differences.push(`Strategy: DB=${match.strategyType} vs Statement=${stmtPos.strategyType}`);
           }
@@ -539,19 +641,27 @@ export class ReconciliationService {
       .filter(m => !consumedStmtIndices.has(m.idx))
       .map(m => m.pos);
 
-    // DB positions in the period that weren't matched
-    const unmatchedDB = dbPositionsInPeriod.filter(dbPos => !matchedDBIds.has(dbPos.id));
+    // DB positions in the period that weren't matched.
+    // Only flag positions actually opened during the statement period — open positions
+    // entered after the period end shouldn't appear here (they're in the broad match pool
+    // only to catch manual entry date mismatches).
+    const unmatchedDB = dbPositionsInPeriod.filter(dbPos => {
+      if (matchedDBIds.has(dbPos.id)) return false;
+      const entryDate = new Date(dbPos.entryDt);
+      return entryDate >= periodStart && entryDate <= periodEnd;
+    });
 
-    // Try to find potential matches between unmatched statement and DB positions
-    // These are positions that partially match (same symbol + expiry but different strikes, etc.)
+    // Try to find potential matches between unmatched statement and ALL DB positions.
+    // Search broadly — users often enter trades days/weeks after the actual trade date,
+    // so the position may not be in the period-filtered pool.
     const potentialMatches: ReconciliationResult['potentialMatches'] = [];
     const potentialMatchedStmtIndices = new Set<number>();
     const potentialMatchedDBIds = new Set<string>();
 
     for (let i = 0; i < filteredMissing.length; i++) {
       const stmtPos = filteredMissing[i];
-      for (const dbPos of unmatchedDB) {
-        if (potentialMatchedDBIds.has(dbPos.id)) continue;
+      for (const dbPos of dbPositions) {
+        if (potentialMatchedDBIds.has(dbPos.id) || matchedDBIds.has(dbPos.id)) continue;
 
         const symbolMatch = this.normalizeSymbol(dbPos.symbol) === this.normalizeSymbol(stmtPos.symbol);
         const expiryMatch = this.datesMatch(new Date(dbPos.expiry), new Date(stmtPos.expiry));
@@ -628,9 +738,10 @@ export class ReconciliationService {
   }
 
   private datesMatch(date1: Date, date2: Date): boolean {
-    return date1.getFullYear() === date2.getFullYear() &&
-      date1.getMonth() === date2.getMonth() &&
-      date1.getDate() === date2.getDate();
+    // Tolerate 1-day difference to handle timezone mismatches
+    // (DB dates may be stored at local midnight which shifts UTC date by a day)
+    const ONE_DAY_MS = 86400000;
+    return Math.abs(date1.getTime() - date2.getTime()) <= ONE_DAY_MS;
   }
 
   private parsePeriod(statementPeriod: string): { start: Date; end: Date } {

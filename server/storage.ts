@@ -19,6 +19,8 @@ import {
   type InsertUser,
   type Feedback,
   type InsertFeedback,
+  type CashTransaction,
+  type InsertCashTransaction,
   watchlist,
   tickers,
   portfolios,
@@ -29,6 +31,7 @@ import {
   settings,
   users,
   feedback,
+  cashTransactions,
 } from "@shared/schema";
 import { randomUUID } from "crypto";
 import { db } from "./db";
@@ -1210,6 +1213,31 @@ export class DatabaseStorage implements IStorage {
 
   async getAllSettings(userId: string): Promise<Setting[]> {
     return await db.select().from(settings).where(eq(settings.userId, userId));
+  }
+
+  // Cash transaction methods
+  async getCashTransactions(userId: string, portfolioId?: string): Promise<CashTransaction[]> {
+    if (portfolioId) {
+      return await db.select().from(cashTransactions)
+        .where(and(eq(cashTransactions.userId, userId), eq(cashTransactions.portfolioId, portfolioId)))
+        .orderBy(cashTransactions.date);
+    }
+    return await db.select().from(cashTransactions)
+      .where(eq(cashTransactions.userId, userId))
+      .orderBy(cashTransactions.date);
+  }
+
+  async createCashTransaction(userId: string, tx: InsertCashTransaction): Promise<CashTransaction> {
+    const [result] = await db
+      .insert(cashTransactions)
+      .values({ ...tx, userId })
+      .returning();
+    return result;
+  }
+
+  async deleteCashTransaction(userId: string, id: string): Promise<void> {
+    await db.delete(cashTransactions)
+      .where(and(eq(cashTransactions.userId, userId), eq(cashTransactions.id, id)));
   }
 
   // Feedback methods

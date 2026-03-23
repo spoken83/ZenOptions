@@ -2,7 +2,8 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Plus, Pencil, Trash2, Building2, ExternalLink, User, Mail, CreditCard, Calendar, Send, MessageSquare, Upload, FileText, CheckCircle2, AlertTriangle, XCircle, Loader2, ChevronDown, ChevronRight } from "lucide-react";
+import { Plus, Pencil, Trash2, Building2, ExternalLink, User, Mail, CreditCard, Calendar, Send, MessageSquare, Upload, FileText, CheckCircle2, AlertTriangle, XCircle, Loader2, ChevronDown, ChevronRight, Download } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
@@ -44,6 +45,9 @@ export default function Profile() {
   const [reconError, setReconError] = useState<string | null>(null);
   const [expandedMissing, setExpandedMissing] = useState<Set<number>>(new Set());
   const [expandedDiffs, setExpandedDiffs] = useState<Set<number>>(new Set());
+  const [selectedForImport, setSelectedForImport] = useState<Set<number>>(new Set());
+  const [importPreviewOpen, setImportPreviewOpen] = useState(false);
+  const [importLoading, setImportLoading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Populate Telegram chat ID when user data loads
@@ -735,12 +739,24 @@ export default function Profile() {
                       In Statement but Not in Database ({reconResult.missingFromDB.length})
                     </h4>
                     <p className="text-xs text-muted-foreground mb-2">
-                      These trades appear in the broker statement but have no corresponding position in your database. Click a row to see extracted trade legs.
+                      These trades appear in the broker statement but have no corresponding position in your database. Select trades to import them.
                     </p>
                     <div className="border rounded-lg overflow-hidden">
                       <table className="w-full text-sm">
                         <thead className="bg-muted">
                           <tr>
+                            <th className="w-8 p-2">
+                              <Checkbox
+                                checked={selectedForImport.size === reconResult.missingFromDB.length && reconResult.missingFromDB.length > 0}
+                                onCheckedChange={(checked) => {
+                                  if (checked) {
+                                    setSelectedForImport(new Set(reconResult.missingFromDB.map((_: any, i: number) => i)));
+                                  } else {
+                                    setSelectedForImport(new Set());
+                                  }
+                                }}
+                              />
+                            </th>
                             <th className="w-6 p-2"></th>
                             <th className="text-left p-2">Symbol</th>
                             <th className="text-left p-2">Strategy</th>
@@ -770,6 +786,18 @@ export default function Profile() {
                                     });
                                   }}
                                 >
+                                  <td className="p-2" onClick={(e) => e.stopPropagation()}>
+                                    <Checkbox
+                                      checked={selectedForImport.has(i)}
+                                      onCheckedChange={(checked) => {
+                                        setSelectedForImport(prev => {
+                                          const next = new Set(prev);
+                                          if (checked) next.add(i); else next.delete(i);
+                                          return next;
+                                        });
+                                      }}
+                                    />
+                                  </td>
                                   <td className="p-2">
                                     {isExpanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
                                   </td>
@@ -799,7 +827,7 @@ export default function Profile() {
                                 </tr>
                                 {isExpanded && trades.length > 0 && (
                                   <tr>
-                                    <td colSpan={9} className="p-0">
+                                    <td colSpan={10} className="p-0">
                                       <div className="bg-muted/30 px-6 py-2 border-t">
                                         <p className="text-xs font-medium text-muted-foreground mb-1">Extracted Trade Legs:</p>
                                         <table className="w-full text-xs">
@@ -842,6 +870,233 @@ export default function Profile() {
                         </tbody>
                       </table>
                     </div>
+
+                    {/* Import action bar */}
+                    {selectedForImport.size > 0 && (() => {
+                      const selected = reconResult.missingFromDB.filter((_: any, i: number) => selectedForImport.has(i));
+                      const openCount = selected.filter((p: any) => !p.closedAt).length;
+                      const closedCount = selected.filter((p: any) => p.closedAt).length;
+                      const totalPremium = selected.reduce((sum: number, p: any) => sum + (p.entryCredit || 0) * (p.contracts || 1) * 100, 0);
+                      const totalPL = selected.filter((p: any) => p.closedAt && p.realizedPL != null).reduce((sum: number, p: any) => sum + p.realizedPL, 0);
+                      const totalFees = selected.reduce((sum: number, p: any) => sum + (p.totalFees || 0), 0);
+
+                      return (
+                        <>
+                          <div className="mt-3 p-3 bg-muted/50 border rounded-lg flex items-center justify-between gap-4">
+                            <div className="text-sm">
+                              <span className="font-medium">{selectedForImport.size} position{selectedForImport.size > 1 ? 's' : ''} selected</span>
+                              <span className="text-muted-foreground ml-2">
+                                ({openCount} open, {closedCount} closed)
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setImportPreviewOpen(true)}
+                              >
+                                Preview Impact
+                              </Button>
+                              <Button
+                                size="sm"
+                                disabled={importLoading}
+                                onClick={() => setImportPreviewOpen(true)}
+                              >
+                                <Download className="h-3 w-3 mr-1" />
+                                Import Selected
+                              </Button>
+                            </div>
+                          </div>
+
+                          {/* Preview / Confirm dialog */}
+                          <Dialog open={importPreviewOpen} onOpenChange={setImportPreviewOpen}>
+                            <DialogContent className="max-w-5xl max-h-[80vh] overflow-y-auto">
+                              <DialogHeader>
+                                <DialogTitle>Import Preview</DialogTitle>
+                              </DialogHeader>
+
+                              <div className="space-y-4">
+                                {/* Summary cards */}
+                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                                  <div className="bg-muted/50 rounded-lg p-3 text-center">
+                                    <div className="text-lg font-bold">{openCount}</div>
+                                    <div className="text-xs text-muted-foreground">Open Positions</div>
+                                  </div>
+                                  <div className="bg-muted/50 rounded-lg p-3 text-center">
+                                    <div className="text-lg font-bold">{closedCount}</div>
+                                    <div className="text-xs text-muted-foreground">Closed Positions</div>
+                                  </div>
+                                  <div className="bg-muted/50 rounded-lg p-3 text-center">
+                                    <div className="text-lg font-bold font-mono">${totalPremium.toFixed(0)}</div>
+                                    <div className="text-xs text-muted-foreground">Total Premium</div>
+                                  </div>
+                                  {closedCount > 0 && (
+                                    <div className="bg-muted/50 rounded-lg p-3 text-center">
+                                      <div className={`text-lg font-bold font-mono ${totalPL >= 0 ? 'text-green-500' : 'text-destructive'}`}>
+                                        ${totalPL.toFixed(0)}
+                                      </div>
+                                      <div className="text-xs text-muted-foreground">Realized P&L</div>
+                                    </div>
+                                  )}
+                                </div>
+
+                                {totalFees > 0 && (
+                                  <p className="text-xs text-muted-foreground">Total fees: ${totalFees.toFixed(2)}</p>
+                                )}
+
+                                {/* Open positions table */}
+                                {openCount > 0 && (
+                                  <div>
+                                    <h4 className="text-sm font-medium mb-1">Open Positions</h4>
+                                    <div className="border rounded-lg overflow-hidden">
+                                      <table className="w-full text-xs">
+                                        <thead className="bg-muted">
+                                          <tr>
+                                            <th className="text-left p-2">Symbol</th>
+                                            <th className="text-left p-2">Strategy</th>
+                                            <th className="text-left p-2">Strikes</th>
+                                            <th className="text-left p-2">Expiry</th>
+                                            <th className="text-right p-2">Contracts</th>
+                                            <th className="text-right p-2">Entry</th>
+                                            <th className="text-left p-2">Entered</th>
+                                          </tr>
+                                        </thead>
+                                        <tbody>
+                                          {selected.filter((p: any) => !p.closedAt).map((pos: any, idx: number) => (
+                                            <tr key={idx} className="border-t">
+                                              <td className="p-2 font-medium">{pos.symbol}</td>
+                                              <td className="p-2">
+                                                <Badge variant="outline" className="text-xs">
+                                                  {pos.strategyType === 'IRON_CONDOR' ? 'IC' : pos.strategyType === 'LEAPS' ? 'LEAPS' : pos.strategyType === 'COVERED_CALL' ? 'CC' : pos.type === 'PUT' ? 'PCS' : 'CCS'}
+                                                </Badge>
+                                              </td>
+                                              <td className="p-2 font-mono">
+                                                {pos.shortStrike}{pos.longStrike ? `/${pos.longStrike}` : ''}
+                                              </td>
+                                              <td className="p-2">{pos.expiry}</td>
+                                              <td className="p-2 text-right">{pos.contracts}</td>
+                                              <td className="p-2 text-right font-mono">${pos.entryCredit?.toFixed(2)}</td>
+                                              <td className="p-2 text-muted-foreground">
+                                                {pos.tradeTime ? new Date(pos.tradeTime).toLocaleDateString() : '—'}
+                                              </td>
+                                            </tr>
+                                          ))}
+                                        </tbody>
+                                      </table>
+                                    </div>
+                                  </div>
+                                )}
+
+                                {/* Closed positions table */}
+                                {closedCount > 0 && (
+                                  <div>
+                                    <h4 className="text-sm font-medium mb-1">Closed Positions</h4>
+                                    <div className="border rounded-lg overflow-hidden">
+                                      <table className="w-full text-xs">
+                                        <thead className="bg-muted">
+                                          <tr>
+                                            <th className="text-left p-2">Symbol</th>
+                                            <th className="text-left p-2">Strategy</th>
+                                            <th className="text-left p-2">Strikes</th>
+                                            <th className="text-left p-2">Expiry</th>
+                                            <th className="text-right p-2">Contracts</th>
+                                            <th className="text-right p-2">Entry</th>
+                                            <th className="text-right p-2">Exit</th>
+                                            <th className="text-right p-2">Realised P/L</th>
+                                            <th className="text-left p-2">Entered</th>
+                                            <th className="text-left p-2">Closed</th>
+                                          </tr>
+                                        </thead>
+                                        <tbody>
+                                          {selected.filter((p: any) => p.closedAt).map((pos: any, idx: number) => (
+                                            <tr key={idx} className="border-t">
+                                              <td className="p-2 font-medium">{pos.symbol}</td>
+                                              <td className="p-2">
+                                                <Badge variant="outline" className="text-xs">
+                                                  {pos.strategyType === 'IRON_CONDOR' ? 'IC' : pos.strategyType === 'LEAPS' ? 'LEAPS' : pos.strategyType === 'COVERED_CALL' ? 'CC' : pos.type === 'PUT' ? 'PCS' : 'CCS'}
+                                                </Badge>
+                                              </td>
+                                              <td className="p-2 font-mono">
+                                                {pos.shortStrike}{pos.longStrike ? `/${pos.longStrike}` : ''}
+                                              </td>
+                                              <td className="p-2">{pos.expiry}</td>
+                                              <td className="p-2 text-right">{pos.contracts}</td>
+                                              <td className="p-2 text-right font-mono">${pos.entryCredit?.toFixed(2)}</td>
+                                              <td className="p-2 text-right font-mono">
+                                                {pos.exitCredit != null ? `$${pos.exitCredit.toFixed(2)}` : '—'}
+                                              </td>
+                                              <td className="p-2 text-right font-mono">
+                                                {pos.realizedPL != null ? (
+                                                  <span className={pos.realizedPL >= 0 ? 'text-green-500' : 'text-destructive'}>
+                                                    {pos.realizedPL >= 0 ? '+' : ''}${pos.realizedPL.toFixed(2)}
+                                                  </span>
+                                                ) : '—'}
+                                              </td>
+                                              <td className="p-2 text-muted-foreground">
+                                                {pos.tradeTime ? new Date(pos.tradeTime).toLocaleDateString() : '—'}
+                                              </td>
+                                              <td className="p-2 text-muted-foreground">
+                                                {pos.closedAt ? new Date(pos.closedAt).toLocaleDateString() : '—'}
+                                              </td>
+                                            </tr>
+                                          ))}
+                                        </tbody>
+                                      </table>
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+
+                              <DialogFooter>
+                                <Button variant="outline" onClick={() => setImportPreviewOpen(false)}>
+                                  Cancel
+                                </Button>
+                                <Button
+                                  disabled={importLoading}
+                                  onClick={async () => {
+                                    setImportLoading(true);
+                                    try {
+                                      const res = await apiRequest('POST', '/api/reconciliation/import', {
+                                        positions: selected,
+                                        portfolioId: reconPortfolioId,
+                                      });
+                                      const data = await res.json();
+                                      if (data.success) {
+                                        toast({
+                                          title: 'Positions imported',
+                                          description: `${data.imported} position${data.imported > 1 ? 's' : ''} imported successfully.${data.errors > 0 ? ` ${data.errors} failed.` : ''}`,
+                                        });
+                                        // Remove imported items from reconResult
+                                        setReconResult((prev: any) => ({
+                                          ...prev,
+                                          missingFromDB: prev.missingFromDB.filter((_: any, i: number) => !selectedForImport.has(i)),
+                                          summary: {
+                                            ...prev.summary,
+                                            missingFromDB: prev.summary.missingFromDB - data.imported,
+                                          },
+                                        }));
+                                        setSelectedForImport(new Set());
+                                        setImportPreviewOpen(false);
+                                        queryClient.invalidateQueries({ queryKey: ["/api/positions"] });
+                                      } else {
+                                        toast({ title: 'Import failed', description: data.message, variant: 'destructive' });
+                                      }
+                                    } catch (err: any) {
+                                      toast({ title: 'Import failed', description: err.message, variant: 'destructive' });
+                                    } finally {
+                                      setImportLoading(false);
+                                    }
+                                  }}
+                                >
+                                  {importLoading ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <Download className="h-3 w-3 mr-1" />}
+                                  Confirm Import
+                                </Button>
+                              </DialogFooter>
+                            </DialogContent>
+                          </Dialog>
+                        </>
+                      );
+                    })()}
                   </div>
                 )}
 
@@ -1006,6 +1261,9 @@ export default function Profile() {
                             <th className="text-left p-2">Strikes</th>
                             <th className="text-left p-2">Expiry</th>
                             <th className="text-right p-2">Contracts</th>
+                            <th className="text-right p-2">Entry Credit</th>
+                            <th className="text-left p-2">Status</th>
+                            <th className="text-left p-2">Date</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -1016,7 +1274,7 @@ export default function Profile() {
                                 <td className="p-2 font-medium">{m.statement.symbol}</td>
                                 <td className="p-2">
                                   <Badge variant="outline" className="text-xs">
-                                    {m.statement.strategyType === 'IRON_CONDOR' ? 'IC' : m.statement.strategyType === 'LEAPS' ? 'LEAPS' : m.statement.type === 'PUT' ? 'PCS' : 'CCS'}
+                                    {(m.database.strategyType || m.statement.strategyType) === 'IRON_CONDOR' ? 'IC' : (m.database.strategyType || m.statement.strategyType) === 'LEAPS' ? 'LEAPS' : (m.database.strategyType || m.statement.strategyType) === 'COVERED_CALL' ? 'CC' : m.statement.type === 'PUT' ? 'PCS' : 'CCS'}
                                   </Badge>
                                 </td>
                                 <td className="p-2 font-mono text-xs">
@@ -1024,6 +1282,17 @@ export default function Profile() {
                                 </td>
                                 <td className="p-2">{m.statement.expiry}</td>
                                 <td className="p-2 text-right">{m.statement.contracts}</td>
+                                <td className="p-2 text-right font-mono">${m.statement.entryCredit?.toFixed(2)}</td>
+                                <td className="p-2">
+                                  {m.database.status === 'closed' ? (
+                                    <Badge variant="secondary" className="text-xs">Closed</Badge>
+                                  ) : (
+                                    <Badge className="text-xs">Open</Badge>
+                                  )}
+                                </td>
+                                <td className="p-2 text-xs text-muted-foreground">
+                                  {m.statement.tradeTime ? new Date(m.statement.tradeTime).toLocaleDateString() : '—'}
+                                </td>
                               </tr>
                             ))}
                         </tbody>
