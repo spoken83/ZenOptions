@@ -296,6 +296,11 @@ export default function Dashboard() {
     + unrealizedOptionsPL
     + STOCK_HOLDINGS;
 
+  // ROI calculations
+  const netCapitalInvested = DEPOSITS - WITHDRAWALS;
+  const totalROI = netCapitalInvested > 0 ? ((netAccountValue - netCapitalInvested) / netCapitalInvested) * 100 : 0;
+  const tradingROI = netCapitalInvested > 0 ? ((realizedPL / 100) / netCapitalInvested) * 100 : 0;
+
   const tickerAnalytics = useMemo((): TickerStats[] => {
     const statsMap = new Map<string, TickerStats>();
     
@@ -639,9 +644,22 @@ export default function Dashboard() {
                 <span className="text-xs text-muted-foreground">Include LEAPS</span>
               </label>
             </div>
-            <p className={`text-2xl sm:text-3xl font-bold ${netAccountValue >= 0 ? 'text-success' : 'text-destructive'}`} data-testid="text-net-account-value">
-              {positionsLoading ? "-" : `${netAccountValue >= 0 ? '' : '-'}$${formatNumber(Math.abs(netAccountValue), 0)}`}
-            </p>
+            <div className="flex items-baseline gap-3">
+              <p className={`text-2xl sm:text-3xl font-bold ${netAccountValue >= 0 ? 'text-success' : 'text-destructive'}`} data-testid="text-net-account-value">
+                {positionsLoading ? "-" : `${netAccountValue >= 0 ? '' : '-'}$${formatNumber(Math.abs(netAccountValue), 0)}`}
+              </p>
+              {!positionsLoading && netCapitalInvested > 0 && (
+                <div className="flex items-center gap-2">
+                  <span className={`text-sm font-semibold ${totalROI >= 0 ? 'text-success' : 'text-destructive'}`}>
+                    {totalROI >= 0 ? '+' : ''}{totalROI.toFixed(1)}% ROI
+                  </span>
+                  <span className="text-xs text-muted-foreground">|</span>
+                  <span className={`text-xs ${tradingROI >= 0 ? 'text-success' : 'text-destructive'}`}>
+                    {tradingROI >= 0 ? '+' : ''}{tradingROI.toFixed(1)}% trading
+                  </span>
+                </div>
+              )}
+            </div>
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4 pt-4 border-t">
             <div>
@@ -1079,13 +1097,17 @@ export default function Dashboard() {
         </Card>
       )}
 
-      {/* Monthly Account Balance */}
+      {/* Net Capital Equity Curve */}
       {!positionsLoading && monthlyReport.length > 0 && (
         <Card className="mb-8">
           <CardHeader>
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-              <CardTitle className="text-lg">Monthly Account Balance</CardTitle>
-              <p className="text-xs text-muted-foreground">Net Capital = Deposits - Withdrawals + Realized P&L</p>
+              <div>
+                <CardTitle className="text-lg">Net Capital Deployed</CardTitle>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Tracks your capital base over time: deposits minus withdrawals plus cumulative realized P&L. Excludes open position market values and unrealized P&L.
+                </p>
+              </div>
             </div>
           </CardHeader>
           <CardContent>
