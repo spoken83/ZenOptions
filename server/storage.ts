@@ -1007,8 +1007,8 @@ export class DatabaseStorage implements IStorage {
   async linkPosition(userId: string, positionId: string, parentLeapsId: string): Promise<Position> {
     // Verify parent LEAPS exists and belongs to user
     const parentLeaps = await this.getPosition(userId, parentLeapsId);
-    if (!parentLeaps) throw new Error("Parent LEAPS position not found");
-    if (parentLeaps.strategyType !== 'LEAPS') throw new Error("Parent position must be a LEAPS");
+    if (!parentLeaps) throw new Error("Parent position not found");
+    if (parentLeaps.strategyType !== 'LEAPS' && parentLeaps.strategyType !== 'STOCK') throw new Error("Parent position must be a LEAPS or STOCK");
     
     // Verify child position exists and is a short call
     const childPosition = await this.getPosition(userId, positionId);
@@ -1018,6 +1018,9 @@ export class DatabaseStorage implements IStorage {
     }
     if (childPosition.symbol !== parentLeaps.symbol) {
       throw new Error("Linked position must be on the same symbol");
+    }
+    if (childPosition.portfolioId !== parentLeaps.portfolioId) {
+      throw new Error("Linked positions must be in the same account");
     }
     
     const [updated] = await db

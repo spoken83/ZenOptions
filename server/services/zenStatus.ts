@@ -27,6 +27,9 @@ export class ZenStatusService {
    * Calculate ZenStatus for a position
    */
   calculateZenStatus(position: PositionWithPnL): ZenAnalysis {
+    if (position.strategyType === 'STOCK') {
+      return this.calculateStockZenStatus(position);
+    }
     if (position.strategyType === 'LEAPS') {
       // If this LEAPS has linked short calls, use PMCC-aware status
       if (position.pmccPremiumCollectedCents && position.pmccPremiumCollectedCents > 0) {
@@ -161,8 +164,8 @@ export class ZenStatusService {
     }
 
     // ACTION: Short strike breached (price above the strike you sold)
-    if (currentPrice > shortStrike) {
-      const breach = (currentPrice - shortStrike).toFixed(2);
+    if (currentPrice > (shortStrike || 0)) {
+      const breach = (currentPrice - (shortStrike || 0)).toFixed(2);
       return {
         zenStatus: 'action',
         guidanceText: `Covered call short strike $${shortStrike} breached (price $${currentPrice.toFixed(2)}, +$${breach} above). Consider rolling up or accepting assignment.`,
@@ -201,10 +204,10 @@ export class ZenStatusService {
         zenStatus: 'zen',
         guidanceText: `Covered call on track at +${pnlPercent.toFixed(1)}% with ${dte} DTE. Hold until 50% profit or 21 DTE.`,
         guidanceDetails: {
-          situation: `Covered call collecting theta. Stock at $${currentPrice.toFixed(2)} vs short strike $${shortStrike} — $${(shortStrike - currentPrice).toFixed(2)} buffer.`,
+          situation: `Covered call collecting theta. Stock at $${currentPrice.toFixed(2)} vs short strike $${shortStrike || 0} — $${((shortStrike || 0) - currentPrice).toFixed(2)} buffer.`,
           rule: 'Systematic Rule: Hold PMCC covered calls until 50% profit or 21 DTE to maximize premium income.',
           decisionPoints: [
-            `Strike buffer: $${(shortStrike - currentPrice).toFixed(2)} before breached`,
+            `Strike buffer: $${((shortStrike || 0) - currentPrice).toFixed(2)} before breached`,
             `Target 50% profit (currently +${pnlPercent.toFixed(1)}%)`,
             'Theta decay increasing as expiry approaches'
           ]
@@ -520,7 +523,7 @@ export class ZenStatusService {
     recoveryPotential: boolean;
   } {
     const isCall = position.type === 'CALL';
-    const shortStrike = position.shortStrike;
+    const shortStrike = position.shortStrike || 0;
     const longStrike = position.longStrike || shortStrike;
 
     let firstStrikeBreach = false;
@@ -531,7 +534,7 @@ export class ZenStatusService {
 
     if (position.strategyType === 'IRON_CONDOR') {
       // For Iron Condor, check both PUT and CALL sides
-      const putShortStrike = position.shortStrike;
+      const putShortStrike = position.shortStrike || 0;
       const putLongStrike = position.longStrike || putShortStrike;
       const callShortStrike = position.callShortStrike || putShortStrike;
       const callLongStrike = position.callLongStrike || putLongStrike;
@@ -597,6 +600,81 @@ export class ZenStatusService {
         ? `price moved ${direction} long strike`
         : 'long strike safe',
       recoveryPotential
+    };
+  }
+
+  /**
+   * Stock (long equity) ZenStatus — pure percentage-based, no DTE logic.
+   */
+  private calculateStockZenStatus(position: PositionWithPnL): ZenAnalysis {
+    const pnlPercent = position.pnlPercent ?? 0;
+    const currentPrice = position.currentPrice ?? 0;
+    const entryPrice = (position.entryDebitCents ?? 0) / 100;
+
+    // ACTION: < -10%
+    if (pnlPercent < -10) {
+      return {
+        zenStatus: 'action',
+        guidanceText: `Stock down ${pnlPercent.toFixed(1)}% from entry. Evaluate thesis — consider stop-loss or averaging down.`,
+        guidanceDetails: {
+          situation: `Bought at $${entryPrice.toFixed(2)}, currently $${currentPrice.toFixed(2)} (${pnlPercent.toFixed(1)}%).`,
+          rule: 'Systematic Rule: Stocks down more than 10% warrant re-evaluating the investment thesis. Decide to cut losses or add to the position.',
+          decisionPoints: [
+            'Re-evaluate fundamental thesis — has anything changed?',
+            'Consider setting a stop-loss to limit further downside',
+            'If thesis intact, consider averaging down to lower cost basis',
+          ]
+        }
+      };
+    }
+
+    // MONITOR: -10% to 0%
+    if (pnlPercent < 0) {
+      return {
+        zenStatus: 'monitor',
+        guidanceText: `Stock slightly underwater at ${pnlPercent.toFixed(1)}%. Monitor for recovery or deterioration.`,
+        guidanceDetails: {
+          situation: `Bought at $${entryPrice.toFixed(2)}, currently $${currentPrice.toFixed(2)} (${pnlPercent.toFixed(1)}%).`,
+          rule: 'Systematic Rule: Small losses are normal. Monitor the position and be ready to act if losses exceed 10%.',
+          decisionPoints: [
+            'Hold if investment thesis remains intact',
+            'Watch for support levels and reversal signals',
+            'Consider selling covered calls to reduce cost basis',
+          ]
+        }
+      };
+    }
+
+    // PROFIT: > +15%
+    if (pnlPercent > 15) {
+      return {
+        zenStatus: 'profit',
+        guidanceText: `Stock up +${pnlPercent.toFixed(1)}%. Consider taking partial profits or setting a trailing stop.`,
+        guidanceDetails: {
+          situation: `Bought at $${entryPrice.toFixed(2)}, currently $${currentPrice.toFixed(2)} (+${pnlPercent.toFixed(1)}%).`,
+          rule: 'Systematic Rule: Gains above 15% are worth protecting. Consider trimming or using a trailing stop to lock in profits.',
+          decisionPoints: [
+            'Consider selling a portion (e.g., 25-50%) to lock in gains',
+            'Set a trailing stop to protect remaining position',
+            'Sell covered calls to generate income while holding',
+          ]
+        }
+      };
+    }
+
+    // ZEN: 0% to +15%
+    return {
+      zenStatus: 'zen',
+      guidanceText: `Stock position healthy at +${pnlPercent.toFixed(1)}%. Hold and let it work.`,
+      guidanceDetails: {
+        situation: `Bought at $${entryPrice.toFixed(2)}, currently $${currentPrice.toFixed(2)} (+${pnlPercent.toFixed(1)}%).`,
+        rule: 'Systematic Rule: Positions in the 0-15% range are on track. No action needed — let winners run.',
+        decisionPoints: [
+          'Continue holding — position is performing as expected',
+          'Consider selling covered calls for additional income',
+          'Monitor for any fundamental changes to the thesis',
+        ]
+      }
     };
   }
 

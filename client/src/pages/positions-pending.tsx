@@ -24,6 +24,7 @@ import {
 import AddTradeModal from "@/components/modals/add-trade-modal";
 import AddIronCondorModal from "@/components/modals/add-iron-condor-modal";
 import AddLeapsModal from "@/components/modals/add-leaps-modal";
+import AddStockModal from "@/components/modals/add-stock-modal";
 import EditPositionModal from "@/components/modals/edit-position-modal";
 import EditIronCondorModal from "@/components/modals/edit-iron-condor-modal";
 import EditLeapsModal from "@/components/modals/edit-leaps-modal";
@@ -89,6 +90,7 @@ export default function PositionsPending() {
   const [isAddTradeOpen, setIsAddTradeOpen] = useState(false);
   const [isAddIronCondorOpen, setIsAddIronCondorOpen] = useState(false);
   const [isAddLeapsOpen, setIsAddLeapsOpen] = useState(false);
+  const [isAddStockOpen, setIsAddStockOpen] = useState(false);
   const [isEditPositionOpen, setIsEditPositionOpen] = useState(false);
   const [isEditIronCondorOpen, setIsEditIronCondorOpen] = useState(false);
   const [isEditLeapsOpen, setIsEditLeapsOpen] = useState(false);
@@ -142,6 +144,9 @@ export default function PositionsPending() {
       setIsEditIronCondorOpen(true);
     } else if (position.strategyType === "LEAPS") {
       setIsEditLeapsOpen(true);
+    } else if (position.strategyType === "STOCK") {
+      // Stock uses generic edit modal
+      setIsEditPositionOpen(true);
     } else {
       setIsEditPositionOpen(true);
     }
@@ -309,22 +314,28 @@ export default function PositionsPending() {
   const filterByStrategy = (positionsList: Position[]) => {
     if (strategyFilter === "all") return positionsList;
     if (strategyFilter === "iron_condor") return positionsList.filter(p => p.strategyType === "IRON_CONDOR");
-    if (strategyFilter === "call_spread") return positionsList.filter(p => p.type === "CALL" && p.strategyType !== "IRON_CONDOR" && p.strategyType !== "LEAPS");
-    if (strategyFilter === "put_spread") return positionsList.filter(p => p.type === "PUT" && p.strategyType !== "IRON_CONDOR" && p.strategyType !== "LEAPS");
+    if (strategyFilter === "call_spread") return positionsList.filter(p => p.type === "CALL" && p.strategyType !== "IRON_CONDOR" && p.strategyType !== "LEAPS" && p.strategyType !== "STOCK");
+    if (strategyFilter === "put_spread") return positionsList.filter(p => p.type === "PUT" && p.strategyType !== "IRON_CONDOR" && p.strategyType !== "LEAPS" && p.strategyType !== "STOCK");
+    if (strategyFilter === "stock") return positionsList.filter(p => p.strategyType === "STOCK");
     return positionsList;
   };
 
-  // Separate LEAPS positions from credit spreads and iron condors FIRST, then apply filters separately
+  // Separate LEAPS and STOCK positions from credit spreads and iron condors FIRST, then apply filters separately
   const filteredByAccountPositions = filterByAccount(positions || []);
-  
+
   // LEAPS positions - NOT affected by strategy filter, only by account filter and sorting
   const openLeapsPositions = sortBySymbolIfNeeded(sortByDTEIfNeeded(
     filteredByAccountPositions.filter(p => p.strategyType === "LEAPS")
   ));
+
+  // STOCK positions - NOT affected by strategy filter, only by account filter and sorting
+  const openStockPositions = sortBySymbolIfNeeded(
+    filteredByAccountPositions.filter(p => p.strategyType === "STOCK")
+  );
   
   // CS & IC positions - affected by strategy filter, account filter, and sorting
   const openPositions = sortBySymbolIfNeeded(sortByDTEIfNeeded(filterByStrategy(
-    filteredByAccountPositions.filter(p => p.strategyType !== "LEAPS")
+    filteredByAccountPositions.filter(p => p.strategyType !== "LEAPS" && p.strategyType !== "STOCK")
   )))
 
   const getPortfolioName = (portfolioId: string | null) => {
@@ -451,7 +462,16 @@ export default function PositionsPending() {
   const handleExecuteOrder = (position: Position) => {
     setExecutingOrderId(position.id);
     
-    if (position.strategyType === 'LEAPS') {
+    if (position.strategyType === 'STOCK') {
+      setDuplicateInitialValues({
+        symbol: position.symbol,
+        entryPrice: (position.entryDebitCents || 0) / 100,
+        shares: position.contracts,
+        portfolioId: position.portfolioId,
+        notes: position.notes,
+      });
+      setIsAddStockOpen(true);
+    } else if (position.strategyType === 'LEAPS') {
       setDuplicateInitialValues({
         symbol: position.symbol,
         strike: position.shortStrike,
@@ -573,6 +593,10 @@ export default function PositionsPending() {
                 <DropdownMenuItem onClick={() => setIsAddLeapsOpen(true)} data-testid="menu-add-leaps">
                   <span className="font-medium">LEAPS</span>
                   <span className="text-xs text-muted-foreground ml-2">Long CALL option</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setIsAddStockOpen(true)} data-testid="menu-add-stock">
+                  <span className="font-medium">Stock</span>
+                  <span className="text-xs text-muted-foreground ml-2">Long equity</span>
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -736,7 +760,7 @@ export default function PositionsPending() {
                               if (!position.entryCreditCents) return <span className="text-xs text-muted-foreground">—</span>;
                               const entryCredit = position.entryCreditCents / 100;
                               if (position.strategyType === "IRON_CONDOR") {
-                                const lowerBE = position.shortStrike - entryCredit;
+                                const lowerBE = (position.shortStrike || 0) - entryCredit;
                                 const upperBE = (position.callShortStrike || 0) + entryCredit;
                                 const currentTickerPrice = tickerPrices?.prices[position.symbol];
                                 const showWarning = currentTickerPrice !== null && currentTickerPrice !== undefined && (
@@ -757,9 +781,9 @@ export default function PositionsPending() {
                                   </div>
                                 );
                               } else {
-                                const be = position.type === "PUT" 
-                                  ? position.shortStrike - entryCredit
-                                  : position.shortStrike + entryCredit;
+                                const be = position.type === "PUT"
+                                  ? (position.shortStrike || 0) - entryCredit
+                                  : (position.shortStrike || 0) + entryCredit;
                                 return <span className="text-sm">{formatCurrencySimple(be)}</span>;
                               }
                             })()}
@@ -809,7 +833,7 @@ export default function PositionsPending() {
                               const maxProfit = position.entryCreditCents / 100;
                               if (position.strategyType === "IRON_CONDOR") {
                                 if (!position.longStrike) return <span className="text-xs text-muted-foreground">—</span>;
-                                const putSpreadWidth = Math.abs(position.longStrike - position.shortStrike);
+                                const putSpreadWidth = Math.abs(position.longStrike - (position.shortStrike || 0));
                                 const callSpreadWidth = Math.abs((position.callLongStrike || 0) - (position.callShortStrike || 0));
                                 const maxSpreadWidth = Math.max(putSpreadWidth, callSpreadWidth);
                                 const maxLossPerContractCents = (maxSpreadWidth * 100) - position.entryCreditCents;
@@ -827,7 +851,7 @@ export default function PositionsPending() {
                                 );
                               } else {
                                 if (!position.longStrike) return <span className="text-xs text-muted-foreground">—</span>;
-                                const spreadWidth = Math.abs(position.longStrike - position.shortStrike);
+                                const spreadWidth = Math.abs(position.longStrike - (position.shortStrike || 0));
                                 const maxLossPerContractCents = (spreadWidth * 100) - position.entryCreditCents;
                                 const maxLoss = maxLossPerContractCents / 100;
                                 const rr = maxProfit > 0 ? (maxLoss / maxProfit).toFixed(2) : "0.00";
@@ -989,7 +1013,7 @@ export default function PositionsPending() {
                             )}
                           </TableCell>
                           <TableCell>
-                            <span className="text-sm">{formatCurrencySimple(position.shortStrike)}</span>
+                            <span className="text-sm">{formatCurrencySimple(position.shortStrike || 0)}</span>
                           </TableCell>
                           <TableCell>
                             <div className="text-sm">{format(new Date(position.expiry), "dd/MM/yyyy")}</div>
@@ -1143,6 +1167,19 @@ export default function PositionsPending() {
             setExecutingOrderId(null);
           }
         }} 
+        status="order"
+        initialValues={duplicateInitialValues}
+        executingOrderId={executingOrderId}
+      />
+      <AddStockModal
+        open={isAddStockOpen}
+        onOpenChange={(open) => {
+          setIsAddStockOpen(open);
+          if (!open) {
+            setDuplicateInitialValues(null);
+            setExecutingOrderId(null);
+          }
+        }}
         status="order"
         initialValues={duplicateInitialValues}
         executingOrderId={executingOrderId}

@@ -163,8 +163,8 @@ export default function Alerts() {
     if (!alert.currentMidCents) return null;
     
     // P/L in full contract value (cents for 100 shares)
-    const pnlCents = position.entryCreditCents - alert.currentMidCents;
-    const pnlPercent = (pnlCents / position.entryCreditCents) * 100;
+    const pnlCents = (position.entryCreditCents || 0) - alert.currentMidCents;
+    const pnlPercent = (position.entryCreditCents || 0) > 0 ? (pnlCents / (position.entryCreditCents || 0)) * 100 : 0;
     
     return {
       absolute: pnlCents, // Full contract value in cents
@@ -369,7 +369,7 @@ export default function Alerts() {
 
                   {/* Metrics line */}
                   <div className="text-sm text-muted-foreground">
-                    <span>Entry: <span className="mono">{formatMoney(position.entryCreditCents / 100)}</span></span>
+                    <span>Entry: <span className="mono">{formatMoney((position.entryCreditCents || 0) / 100)}</span></span>
                     {" | "}
                     <span>Mid: <span className={`mono ${alert.currentMidCents && alert.type.startsWith("tp") ? "text-success" : alert.currentMidCents ? "text-destructive" : ""}`}>
                       {alert.currentMidCents ? formatMoney(alert.currentMidCents / 100) : "—"}
@@ -391,10 +391,10 @@ export default function Alerts() {
                   {/* Thresholds / rule line */}
                   <div className="text-xs text-muted-foreground">
                     {alert.type.startsWith("tp") && (
-                      <span>Stops: {thresholdsLine(position.entryCreditCents)}</span>
+                      <span>Stops: {thresholdsLine(position.entryCreditCents || 0)}</span>
                     )}
                     {(alert.type.startsWith("sl") || alert.type === "stop2x") && (
-                      <span>Thresholds: {thresholdsLine(position.entryCreditCents)}</span>
+                      <span>Thresholds: {thresholdsLine(position.entryCreditCents || 0)}</span>
                     )}
                     {(alert.type.startsWith("dte")) && (
                       <span>Mgmt rule: review/roll/exit at ≤21 DTE</span>

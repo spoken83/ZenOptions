@@ -21,11 +21,13 @@ const editPositionSchema = z.object({
   symbol: z.string().min(1, "Symbol is required").toUpperCase(),
   portfolioId: z.string().optional(),
   contracts: z.number().int().positive("Number of contracts must be at least 1").default(1),
-  type: z.enum(["PUT", "CALL"]),
-  shortStrike: z.number().positive("Short strike must be positive"),
-  longStrike: z.number().positive("Long strike must be positive"),
+  type: z.string().min(1, "Type is required"),
+  shortStrike: z.number().nullable().optional(),
+  longStrike: z.number().nullable().optional(),
   expiry: z.string().min(1, "Expiry is required"),
-  entryCredit: z.number().positive("Entry credit must be positive"),
+  entryCredit: z.number().positive("Entry credit must be positive").nullable().optional(),
+  entryDebit: z.number().positive("Entry price must be positive").nullable().optional(),
+  linkedPositionId: z.string().nullable().optional(),
   notes: z.string().optional(),
 });
 
@@ -47,6 +49,10 @@ export default function EditPositionModal({ open, onOpenChange, position }: Edit
     queryKey: ["/api/portfolios"],
   });
 
+  const { data: allPositions } = useQuery<Position[]>({
+    queryKey: ["/api/positions?status=open"],
+  });
+
   const form = useForm<EditPositionForm>({
     resolver: zodResolver(editPositionSchema),
     defaultValues: {
@@ -60,15 +66,19 @@ export default function EditPositionModal({ open, onOpenChange, position }: Edit
   useEffect(() => {
     if (position && open) {
       const expiryDate = new Date(position.expiry);
+      const isStock = position.strategyType === 'STOCK';
+      const isDebit = position.strategyType === 'LEAPS' || isStock;
       form.reset({
         symbol: position.symbol,
         portfolioId: position.portfolioId || "",
         contracts: position.contracts || 1,
-        type: position.type as "PUT" | "CALL",
+        type: position.type,
         shortStrike: position.shortStrike,
-        longStrike: position.longStrike || 0,
+        longStrike: position.longStrike || null,
         expiry: format(expiryDate, "yyyy-MM-dd"),
-        entryCredit: (position.entryCreditCents || 0) / 100,
+        entryCredit: isDebit ? null : (position.entryCreditCents || 0) / 100,
+        entryDebit: isDebit ? (position.entryDebitCents || 0) / 100 : null,
+        linkedPositionId: position.linkedPositionId || null,
         notes: position.notes || "",
       });
     }
@@ -78,6 +88,8 @@ export default function EditPositionModal({ open, onOpenChange, position }: Edit
     mutationFn: async (data: EditPositionForm) => {
       if (!position) throw new Error("No position selected");
       
+      const isStock = position.strategyType === 'STOCK';
+      const isDebit = position.strategyType === 'LEAPS' || isStock;
       const response = await apiRequest("PATCH", `/api/positions/${position.id}`, {
         symbol: data.symbol,
         portfolioId: data.portfolioId || null,
@@ -86,7 +98,10 @@ export default function EditPositionModal({ open, onOpenChange, position }: Edit
         shortStrike: data.shortStrike,
         longStrike: data.longStrike,
         expiry: new Date(data.expiry),
-        entryCreditCents: Math.round(data.entryCredit * 100),
+        ...(isDebit
+          ? { entryDebitCents: data.entryDebit ? Math.round(data.entryDebit * 100) : null }
+          : { entryCreditCents: data.entryCredit ? Math.round(data.entryCredit * 100) : null }),
+        linkedPositionId: data.linkedPositionId || null,
         notes: data.notes,
       });
       return response.json();
@@ -138,11 +153,27 @@ export default function EditPositionModal({ open, onOpenChange, position }: Edit
 
   if (!position) return null;
 
+  const isCoveredCall = position.strategyType === 'COVERED_CALL';
+  const isStock = position.strategyType === 'STOCK';
+  const isDebit = position.strategyType === 'LEAPS' || isStock;
+  const showType = !isCoveredCall && !isStock;
+  const showLongStrike = !isCoveredCall && !isStock;
+  const showStrike = !isStock;
+  const showExpiry = !isStock;
+
+  const titleMap: Record<string, string> = {
+    'COVERED_CALL': 'Edit Covered Call',
+    'STOCK': 'Edit Stock Position',
+    'CREDIT_SPREAD': 'Edit Credit Spread',
+    'IRON_CONDOR': 'Edit Iron Condor',
+    'LEAPS': 'Edit LEAPS',
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Edit Position</DialogTitle>
+          <DialogTitle>{titleMap[position.strategyType] || 'Edit Position'}</DialogTitle>
         </DialogHeader>
 
         <Form {...form}>
@@ -162,6 +193,7 @@ export default function EditPositionModal({ open, onOpenChange, position }: Edit
                 )}
               />
 
+              {showType ? (
               <FormField
                 control={form.control}
                 name="type"
@@ -183,6 +215,13 @@ export default function EditPositionModal({ open, onOpenChange, position }: Edit
                   </FormItem>
                 )}
               />
+              ) : (
+                <div className="flex items-end pb-2">
+                  <span className="text-sm font-medium text-muted-foreground">
+                    {isCoveredCall ? 'Covered Call' : isStock ? 'Long Stock' : position.type}
+                  </span>
+                </div>
+              )}
             </div>
 
             <div className="grid grid-cols-2 gap-4">
@@ -238,16 +277,18 @@ export default function EditPositionModal({ open, onOpenChange, position }: Edit
               />
             </div>
 
-            <div className="grid grid-cols-3 gap-4">
+            <div className={`grid gap-4 ${showLongStrike ? 'grid-cols-3' : 'grid-cols-2'}`}>
+              {showStrike && (
               <FormField
                 control={form.control}
                 name="shortStrike"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Short Strike</FormLabel>
+                    <FormLabel>{isCoveredCall ? 'Strike Price' : 'Short Strike'}</FormLabel>
                     <FormControl>
                       <Input
                         {...field}
+                        value={field.value ?? ""}
                         type="number"
                         step="0.01"
                         placeholder="420.00"
@@ -260,7 +301,9 @@ export default function EditPositionModal({ open, onOpenChange, position }: Edit
                   </FormItem>
                 )}
               />
+              )}
 
+              {showLongStrike && (
               <FormField
                 control={form.control}
                 name="longStrike"
@@ -270,6 +313,7 @@ export default function EditPositionModal({ open, onOpenChange, position }: Edit
                     <FormControl>
                       <Input
                         {...field}
+                        value={field.value ?? ""}
                         type="number"
                         step="0.01"
                         placeholder="415.00"
@@ -282,19 +326,21 @@ export default function EditPositionModal({ open, onOpenChange, position }: Edit
                   </FormItem>
                 )}
               />
+              )}
 
               <FormField
                 control={form.control}
-                name="entryCredit"
+                name={isDebit ? "entryDebit" : "entryCredit"}
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Entry Credit ($)</FormLabel>
+                    <FormLabel>{isStock ? 'Entry Price ($)' : isCoveredCall ? 'Premium Received ($)' : isDebit ? 'Entry Debit ($)' : 'Entry Credit ($)'}</FormLabel>
                     <FormControl>
                       <Input
                         {...field}
+                        value={field.value ?? ""}
                         type="number"
                         step="0.01"
-                        placeholder="1.50"
+                        placeholder={isDebit ? "150.00" : "1.50"}
                         className="mono"
                         onChange={(e) => field.onChange(parseFloat(e.target.value))}
                         data-testid="input-entry-credit"
@@ -306,6 +352,50 @@ export default function EditPositionModal({ open, onOpenChange, position }: Edit
               />
             </div>
 
+            {isCoveredCall && (
+              <FormField
+                control={form.control}
+                name="linkedPositionId"
+                render={({ field }) => {
+                  // Only show LEAPS/STOCK in same portfolio with same symbol
+                  const parentCandidates = (allPositions || []).filter(p =>
+                    (p.strategyType === 'LEAPS' || p.strategyType === 'STOCK') &&
+                    p.symbol === position.symbol &&
+                    p.portfolioId === position.portfolioId &&
+                    p.id !== position.id
+                  );
+                  return (
+                    <FormItem>
+                      <FormLabel>Linked To (LEAPS / Stock)</FormLabel>
+                      <Select onValueChange={(v) => field.onChange(v === "none" ? null : v)} value={field.value || "none"}>
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select parent position" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="none">None (unlinked)</SelectItem>
+                          {parentCandidates.map((p) => {
+                            const portfolio = portfolios?.find(port => port.id === p.portfolioId);
+                            return (
+                              <SelectItem key={p.id} value={p.id}>
+                                {p.symbol} {p.strategyType === 'STOCK' ? 'Stock' : `LEAPS $${p.shortStrike}`}
+                                {p.strategyType === 'LEAPS' && p.expiry ? ` • ${format(new Date(p.expiry), "MMM yyyy")}` : ''}
+                                {` (${p.contracts}x)`}
+                                {portfolio ? ` • ${portfolio.name}` : ''}
+                              </SelectItem>
+                            );
+                          })}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  );
+                }}
+              />
+            )}
+
+            {showExpiry && (
             <FormField
               control={form.control}
               name="expiry"
@@ -328,7 +418,9 @@ export default function EditPositionModal({ open, onOpenChange, position }: Edit
                 </FormItem>
               )}
             />
+            )}
 
+            {!isCoveredCall && !isStock && (
             <div>
               <h4 className="text-sm font-medium mb-3">Position Details</h4>
               <div className="grid grid-cols-4 gap-4 text-sm">
@@ -350,6 +442,7 @@ export default function EditPositionModal({ open, onOpenChange, position }: Edit
                 </div>
               </div>
             </div>
+            )}
 
             <FormField
               control={form.control}

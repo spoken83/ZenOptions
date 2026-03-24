@@ -89,6 +89,7 @@ export default function PositionsClosed() {
   const getFilterBucket = (p: Position): string => {
     if (p.strategyType === "LEAPS") return "LEAPS";
     if (p.strategyType === "COVERED_CALL") return "CC";
+    if (p.strategyType === "STOCK") return "Stock";
     const entry = new Date(p.entryDt);
     const expiry = new Date(p.expiry);
     const dte = Math.ceil((expiry.getTime() - entry.getTime()) / (1000 * 60 * 60 * 24));
@@ -96,10 +97,11 @@ export default function PositionsClosed() {
     return "45DTE";
   };
 
-  // Display label: e.g., "0DTE PCS", "45DTE IC", "LEAPS", "CC"
+  // Display label: e.g., "0DTE PCS", "45DTE IC", "LEAPS", "CC", "Stock"
   const getStrategyLabel = (p: Position): string => {
     if (p.strategyType === "LEAPS") return "LEAPS";
     if (p.strategyType === "COVERED_CALL") return "CC";
+    if (p.strategyType === "STOCK") return "Stock";
     const bucket = getFilterBucket(p);
     if (p.strategyType === "IRON_CONDOR") return `${bucket} IC`;
     const typeLabel = p.type?.toUpperCase() === "PUT" ? "PCS" : "CCS";
@@ -122,7 +124,7 @@ export default function PositionsClosed() {
     )
   ).sort().reverse();
 
-  const strategyOrder = ["0DTE", "45DTE", "CC", "LEAPS"];
+  const strategyOrder = ["0DTE", "45DTE", "CC", "LEAPS", "Stock"];
   const availableStrategies = strategyOrder.filter(s =>
     allClosedPositions.some(p => getFilterBucket(p) === s)
   );
@@ -351,15 +353,19 @@ export default function PositionsClosed() {
                   {closedPositions.map((position) => {
                     const contracts = position.contracts || 1;
                     const isLeaps = position.strategyType === "LEAPS";
+                    const isStock = position.strategyType === "STOCK";
+                    const isDebit = isLeaps || isStock;
                     const isIC = position.strategyType === "IRON_CONDOR";
-                    
-                    const entryCents = isLeaps ? (position.entryDebitCents || 0) : (position.entryCreditCents || 0);
-                    const exitCents = isLeaps ? (position.exitDebitCents || 0) : (position.exitCreditCents || 0);
-                    
-                    const plPerContract = isLeaps 
-                      ? (exitCents - entryCents) 
+
+                    const entryCents = isDebit ? (position.entryDebitCents || 0) : (position.entryCreditCents || 0);
+                    const exitCents = isDebit ? (position.exitDebitCents || 0) : (position.exitCreditCents || 0);
+
+                    // Stock: no ×100 multiplier. LEAPS exit uses exitDebitCents directly.
+                    const plPerContract = isDebit
+                      ? (exitCents - entryCents)
                       : ((entryCents - exitCents) * 100);
-                    const totalPL = (plPerContract * contracts);
+                    // Stock P&L: plPerContract is per-share (no ×100), multiply by shares
+                    const totalPL = isStock ? (plPerContract * contracts) : (plPerContract * contracts);
                     
                     const enteredDate = new Date(position.entryDt);
                     const closedDate = position.closedAt ? new Date(position.closedAt) : null;
@@ -373,12 +379,14 @@ export default function PositionsClosed() {
                     const strategyDisplay = getStrategyLabel(position);
                     
                     let strikesDisplay = "";
-                    if (isLeaps) {
-                      strikesDisplay = formatCurrencySimple(position.shortStrike);
+                    if (isStock) {
+                      strikesDisplay = `${contracts} shares`;
+                    } else if (isLeaps) {
+                      strikesDisplay = formatCurrencySimple(position.shortStrike || 0);
                     } else if (isIC) {
-                      strikesDisplay = `P: ${formatCurrencySimple(position.shortStrike)}/${formatCurrencySimple(position.longStrike || 0)} C: ${formatCurrencySimple(position.callShortStrike || 0)}/${formatCurrencySimple(position.callLongStrike || 0)}`;
+                      strikesDisplay = `P: ${formatCurrencySimple(position.shortStrike || 0)}/${formatCurrencySimple(position.longStrike || 0)} C: ${formatCurrencySimple(position.callShortStrike || 0)}/${formatCurrencySimple(position.callLongStrike || 0)}`;
                     } else {
-                      strikesDisplay = `${formatCurrencySimple(position.shortStrike)}/${formatCurrencySimple(position.longStrike || 0)}`;
+                      strikesDisplay = `${formatCurrencySimple(position.shortStrike || 0)}/${formatCurrencySimple(position.longStrike || 0)}`;
                     }
 
                     return (
@@ -451,14 +459,14 @@ export default function PositionsClosed() {
                       {(() => {
                         const totalRealised = closedPositions.reduce((total, position) => {
                           const contracts = position.contracts || 1;
-                          const isLeaps = position.strategyType === "LEAPS";
-                          const entryCents = isLeaps ? (position.entryDebitCents || 0) : (position.entryCreditCents || 0);
-                          const exitCents = isLeaps ? (position.exitDebitCents || 0) : (position.exitCreditCents || 0);
-                          
-                          const plPerContract = isLeaps 
-                            ? (exitCents - entryCents) 
+                          const isDebitP = position.strategyType === "LEAPS" || position.strategyType === "STOCK";
+                          const entryCents = isDebitP ? (position.entryDebitCents || 0) : (position.entryCreditCents || 0);
+                          const exitCents = isDebitP ? (position.exitDebitCents || 0) : (position.exitCreditCents || 0);
+
+                          const plPerContract = isDebitP
+                            ? (exitCents - entryCents)
                             : ((entryCents - exitCents) * 100);
-                          
+
                           return total + (plPerContract * contracts);
                         }, 0);
                         return (

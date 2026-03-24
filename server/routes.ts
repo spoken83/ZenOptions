@@ -352,7 +352,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Tiger's pnlCents is for the TOTAL position (all contracts)
         // Entry credit/debit is per contract, so multiply by contracts
         let pnlPercent = 0;
-        if (pos.strategyType === 'LEAPS') {
+        if (pos.strategyType === 'LEAPS' || pos.strategyType === 'STOCK') {
           const totalEntryDebitCents = (pos.entryDebitCents || 0) * contracts;
           // Both values are in cents, so the ratio is already the percentage
           pnlPercent = totalEntryDebitCents > 0 ? (pnlCents / totalEntryDebitCents) : 0;
@@ -373,9 +373,48 @@ export async function registerRoutes(app: Express): Promise<Server> {
         };
       });
 
-      // Group manual positions by (symbol, expiry) to batch API calls
-      const positionGroups: Record<string, typeof manualPositions> = {};
-      for (const pos of manualPositions) {
+      // Separate STOCK positions (use stock quotes, not option chains)
+      const stockPositions = manualPositions.filter(p => p.strategyType === 'STOCK');
+      const optionPositions = manualPositions.filter(p => p.strategyType !== 'STOCK');
+
+      // Fetch stock quotes for STOCK positions
+      const stockSymbols = [...new Set(stockPositions.map(p => p.symbol))];
+      const stockPriceMap = await priceCacheService.getPrices(stockSymbols);
+
+      const stockPnlResults = stockPositions.map(pos => {
+        const currentPriceDollars = stockPriceMap.get(pos.symbol);
+        if (currentPriceDollars === null || currentPriceDollars === undefined) {
+          return {
+            positionId: pos.id,
+            symbol: pos.symbol,
+            entryCreditCents: pos.entryCreditCents,
+            currentCostCents: null,
+            pnlCents: null,
+            pnlPercent: null,
+            error: 'Stock price not available'
+          };
+        }
+        const currentPriceCents = Math.round(currentPriceDollars * 100);
+        const entryDebitCents = pos.entryDebitCents || 0;
+        // P&L per share in cents — NO ×100 multiplier for stocks
+        const pnlCents = currentPriceCents - entryDebitCents;
+        const pnlPercent = entryDebitCents > 0
+          ? ((pnlCents / entryDebitCents) * 100).toFixed(1)
+          : '0.0';
+        return {
+          positionId: pos.id,
+          symbol: pos.symbol,
+          entryCreditCents: pos.entryCreditCents,
+          currentCostCents: currentPriceCents,
+          pnlCents,
+          pnlPercent: parseFloat(pnlPercent),
+          dataSource: 'polygon'
+        };
+      });
+
+      // Group option positions by (symbol, expiry) to batch API calls
+      const positionGroups: Record<string, typeof optionPositions> = {};
+      for (const pos of optionPositions) {
         const key = `${pos.symbol}_${pos.expiry}`;
         if (!positionGroups[key]) positionGroups[key] = [];
         positionGroups[key].push(pos);
@@ -397,8 +436,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         })
       );
 
-      // Calculate PnL for each manual position using Polygon data
-      const manualPnlResults = manualPositions.map(pos => {
+      // Calculate PnL for each option position using Polygon data
+      const manualPnlResults = optionPositions.map(pos => {
         const key = `${pos.symbol}_${pos.expiry}`;
         const chain = optionChainCache[key] || [];
 
@@ -406,7 +445,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           // For LEAPS, just get the single option price
           const option = chain.find(opt =>
             opt.type === pos.type.toLowerCase() &&
-            Math.abs(opt.strike - pos.shortStrike) < 0.01
+            Math.abs(opt.strike - (pos.shortStrike || 0)) < 0.01
           );
 
           if (!option) {
@@ -454,7 +493,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         } else if (pos.strategyType === 'IRON_CONDOR') {
           // For Iron Condor, calculate both PUT and CALL spreads
           const putShortLeg = chain.find(opt =>
-            opt.type === 'put' && Math.abs(opt.strike - pos.shortStrike) < 0.01
+            opt.type === 'put' && Math.abs(opt.strike - (pos.shortStrike || 0)) < 0.01
           );
           const putLongLeg = chain.find(opt =>
             opt.type === 'put' && Math.abs(opt.strike - (pos.longStrike || 0)) < 0.01
@@ -521,11 +560,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
           };
         } else {
           // Covered call: single-leg short call linked to a LEAPS (no long leg)
-          const isCoveredCall = pos.strategyType === 'COVERED_CALL' || (!!pos.linkedPositionId && (!pos.longStrike || pos.longStrike === pos.shortStrike));
+          const isCoveredCall = pos.strategyType === 'COVERED_CALL' || (!!pos.linkedPositionId && (!pos.longStrike || pos.longStrike === (pos.shortStrike || 0)));
           if (isCoveredCall) {
             const shortLeg = chain.find(opt =>
               opt.type === 'call' &&
-              Math.abs(opt.strike - pos.shortStrike) < 0.01
+              Math.abs(opt.strike - (pos.shortStrike || 0)) < 0.01
             );
             if (!shortLeg || (shortLeg.bid === 0 && shortLeg.ask === 0)) {
               return {
@@ -561,7 +600,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           // Regular two-legged credit spread logic
           const shortLeg = chain.find(opt =>
             opt.type === pos.type.toLowerCase() &&
-            Math.abs(opt.strike - pos.shortStrike) < 0.01
+            Math.abs(opt.strike - (pos.shortStrike || 0)) < 0.01
           );
           const longLeg = chain.find(opt =>
             opt.type === pos.type.toLowerCase() &&
@@ -621,8 +660,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       });
 
-      // Combine Tiger and manual results
-      const allResults = [...tigerPnlResults, ...manualPnlResults];
+      // Combine Tiger, stock, and option results
+      const allResults = [...tigerPnlResults, ...stockPnlResults, ...manualPnlResults];
 
       // Build PMCC premium map: for each LEAPS id, track live P&L of its open covered calls
       // ECB = LEAPS entry cost - CC current P&L (mark-to-market, not just entry credit)
@@ -638,10 +677,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
             const totalPnl = pnlResult.dataSource === 'tiger'
               ? pnlResult.pnlCents
               : pnlResult.pnlCents * (pos.contracts ?? 1);
-            pmccPremiumMap.set(
-              pos.linkedPositionId,
-              (pmccPremiumMap.get(pos.linkedPositionId) ?? 0) + totalPnl
-            );
+            if (pos.linkedPositionId) {
+              pmccPremiumMap.set(
+                pos.linkedPositionId,
+                (pmccPremiumMap.get(pos.linkedPositionId) ?? 0) + totalPnl
+              );
+            }
           }
         }
       }
@@ -721,14 +762,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Find the specific option (CALL with matching strike)
       const option = chain.find(opt =>
         opt.type === position.type.toLowerCase() &&
-        Math.abs(opt.strike - position.shortStrike) < 0.01
+        Math.abs(opt.strike - (position.shortStrike || 0)) < 0.01
       );
 
       if (!option) {
         return res.status(404).json({
           message: 'Option data not found in chain',
           symbol: position.symbol,
-          strike: position.shortStrike,
+          strike: position.shortStrike || 0,
           expiry: position.expiry
         });
       }
@@ -737,7 +778,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const optionPrice = (option.bid + option.ask) / 2;
 
       // Calculate intrinsic value: max(0, Stock Price - Strike Price) for CALL
-      const intrinsicValue = Math.max(0, stockPrice - position.shortStrike);
+      const intrinsicValue = Math.max(0, stockPrice - (position.shortStrike || 0));
 
       // Calculate extrinsic value: Option Price - Intrinsic Value
       const extrinsicValue = optionPrice - intrinsicValue;

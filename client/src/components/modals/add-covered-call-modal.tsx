@@ -51,7 +51,8 @@ export default function AddCoveredCallModal({ open, onOpenChange }: AddCoveredCa
     queryKey: ["/api/positions?status=open"],
   });
 
-  const leapsPositions = positions?.filter(p => p.strategyType === "LEAPS") || [];
+  // Include both LEAPS and STOCK positions as valid parents for covered calls
+  const parentPositions = positions?.filter(p => p.strategyType === "LEAPS" || p.strategyType === "STOCK") || [];
 
   const form = useForm<AddCoveredCallForm>({
     resolver: zodResolver(addCoveredCallSchema),
@@ -66,7 +67,7 @@ export default function AddCoveredCallModal({ open, onOpenChange }: AddCoveredCa
   });
 
   const watchLeapsId = form.watch("leapsId");
-  const selectedLeaps = leapsPositions.find(l => l.id === watchLeapsId);
+  const selectedLeaps = parentPositions.find(l => l.id === watchLeapsId);
   const watchCredit = form.watch("entryCredit");
   const watchContracts = form.watch("contracts") || 1;
   const watchExpiry = form.watch("expiry");
@@ -122,7 +123,7 @@ export default function AddCoveredCallModal({ open, onOpenChange }: AddCoveredCa
       queryClient.invalidateQueries({ queryKey: ["/api/portfolios"] });
       toast({
         title: "Covered Call Added",
-        description: `Covered call linked to ${selectedLeaps?.symbol} LEAPS`,
+        description: `Covered call linked to ${selectedLeaps?.symbol} ${selectedLeaps?.strategyType === 'STOCK' ? 'Stock' : 'LEAPS'}`,
       });
       onOpenChange(false);
     },
@@ -158,13 +159,13 @@ export default function AddCoveredCallModal({ open, onOpenChange }: AddCoveredCa
             </DialogTitle>
           </DialogHeader>
 
-          {leapsPositions.length === 0 ? (
+          {parentPositions.length === 0 ? (
             <div className="py-8 text-center">
               <AlertCircle className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-              <h3 className="font-semibold mb-2">No LEAPS Positions Found</h3>
+              <h3 className="font-semibold mb-2">No LEAPS or Stock Positions Found</h3>
               <p className="text-sm text-muted-foreground mb-4">
-                You need to have an open LEAPS position before adding a covered call.
-                Add a LEAPS first, then come back to sell covered calls against it.
+                You need to have an open LEAPS or Stock position before adding a covered call.
+                Add one first, then come back to sell covered calls against it.
               </p>
               <Button variant="outline" onClick={() => onOpenChange(false)}>
                 Close
@@ -178,27 +179,39 @@ export default function AddCoveredCallModal({ open, onOpenChange }: AddCoveredCa
                   name="leapsId"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Select LEAPS Position</FormLabel>
+                      <FormLabel>Select LEAPS / Stock Position</FormLabel>
                       <Select onValueChange={field.onChange} value={field.value}>
                         <FormControl>
                           <SelectTrigger data-testid="select-leaps">
-                            <SelectValue placeholder="Choose a LEAPS to sell against" />
+                            <SelectValue placeholder="Choose a position to sell against" />
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          {leapsPositions.map((leaps) => (
-                            <SelectItem key={leaps.id} value={leaps.id}>
+                          {parentPositions.map((pos) => {
+                            const portfolio = portfolios?.find(p => p.id === pos.portfolioId);
+                            const isStock = pos.strategyType === "STOCK";
+                            return (
+                            <SelectItem key={pos.id} value={pos.id}>
                               <div className="flex items-center gap-2">
-                                <span className="font-semibold">{leaps.symbol}</span>
-                                <span className="text-muted-foreground">
-                                  ${leaps.shortStrike} • {leaps.expiry ? format(new Date(leaps.expiry), "MMM yyyy") : "N/A"}
-                                </span>
+                                <span className="font-semibold">{pos.symbol}</span>
+                                <span className="text-xs px-1.5 py-0.5 rounded bg-muted">{isStock ? "Stock" : "LEAPS"}</span>
+                                {!isStock && (
+                                  <span className="text-muted-foreground">
+                                    ${pos.shortStrike} • {pos.expiry ? format(new Date(pos.expiry), "MMM yyyy") : "N/A"}
+                                  </span>
+                                )}
                                 <span className="text-xs text-muted-foreground">
-                                  ({leaps.contracts}x)
+                                  ({pos.contracts}x)
                                 </span>
+                                {portfolio && (
+                                  <span className="text-xs text-muted-foreground border-l pl-2 ml-1">
+                                    {portfolio.name}
+                                  </span>
+                                )}
                               </div>
                             </SelectItem>
-                          ))}
+                            );
+                          })}
                         </SelectContent>
                       </Select>
                       <FormMessage />
@@ -210,9 +223,11 @@ export default function AddCoveredCallModal({ open, onOpenChange }: AddCoveredCa
                   <div className="p-3 bg-muted/50 rounded-lg text-sm">
                     <p className="font-medium mb-1">Selling against:</p>
                     <p className="text-muted-foreground">
-                      {selectedLeaps.symbol} ${selectedLeaps.shortStrike} LEAPS •
-                      Expires {selectedLeaps.expiry ? format(new Date(selectedLeaps.expiry), "MMM dd, yyyy") : "N/A"} •
-                      {selectedLeaps.contracts} contract{selectedLeaps.contracts > 1 ? "s" : ""}
+                      {selectedLeaps.symbol} {selectedLeaps.strategyType === "STOCK"
+                        ? `Stock • ${selectedLeaps.contracts} share${selectedLeaps.contracts > 1 ? "s" : ""}`
+                        : `$${selectedLeaps.shortStrike} LEAPS • Expires ${selectedLeaps.expiry ? format(new Date(selectedLeaps.expiry), "MMM dd, yyyy") : "N/A"} • ${selectedLeaps.contracts} contract${selectedLeaps.contracts > 1 ? "s" : ""}`
+                      }
+                      {(() => { const p = portfolios?.find(p => p.id === selectedLeaps.portfolioId); return p ? ` • ${p.name}` : ""; })()}
                     </p>
                   </div>
                 )}

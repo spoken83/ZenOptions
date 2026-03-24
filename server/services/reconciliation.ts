@@ -29,7 +29,7 @@ export interface StatementPosition {
   longStrike: number | null;
   callShortStrike?: number | null;
   callLongStrike?: number | null;
-  strategyType: 'CREDIT_SPREAD' | 'IRON_CONDOR' | 'LEAPS' | 'COVERED_CALL';
+  strategyType: 'CREDIT_SPREAD' | 'IRON_CONDOR' | 'LEAPS' | 'COVERED_CALL' | 'STOCK';
   contracts: number;
   entryCredit: number; // dollars (gross, before fees)
   totalFees: number; // total fees for all legs of this position

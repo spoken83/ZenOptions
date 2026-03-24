@@ -4,8 +4,8 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from "@/components/ui/form";
-import { calculateDte } from "@/lib/utils";
+import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogAction, AlertDialogCancel } from "@/components/ui/alert-dialog";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
@@ -13,86 +13,107 @@ import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { apiRequest } from "@/lib/queryClient";
-import { format } from "date-fns";
-import type { Position, Portfolio } from "@shared/schema";
+import type { Portfolio } from "@shared/schema";
 import { AuthModal } from "@/components/auth/AuthModal";
+import { Crown } from "lucide-react";
+import { useLocation } from "wouter";
 
-const editLeapsSchema = z.object({
+const addStockSchema = z.object({
   symbol: z.string().min(1, "Symbol is required").toUpperCase(),
-  portfolioId: z.string().nullable(),
-  contracts: z.number().int().positive("Number of contracts must be at least 1").default(1),
-  strike: z.number().positive("Strike must be positive"),
-  expiry: z.string().min(1, "Expiry is required"),
-  entryDebit: z.number().positive("Entry debit must be positive"),
-  entryDelta: z.number().min(0).max(1, "Delta must be between 0 and 1"),
+  portfolioId: z.string().min(1, "Account is required"),
+  shares: z.number().int().positive("Number of shares must be at least 1").default(1),
+  entryPrice: z.number().positive("Entry price must be positive"),
   notes: z.string().optional(),
 });
 
-type EditLeapsForm = z.infer<typeof editLeapsSchema>;
+type AddStockForm = z.infer<typeof addStockSchema>;
 
-interface EditLeapsModalProps {
+interface AddStockModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  position: Position | null;
+  status?: "open" | "order";
+  initialValues?: {
+    symbol?: string;
+    entryPrice?: number;
+    portfolioId?: string;
+    shares?: number;
+    notes?: string;
+  };
+  executingOrderId?: string | null;
 }
 
-export default function EditLeapsModal({ open, onOpenChange, position }: EditLeapsModalProps) {
+export default function AddStockModal({ open, onOpenChange, status = "open", initialValues, executingOrderId }: AddStockModalProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { isPreLoginMode } = useAuth();
   const [showAuthModal, setShowAuthModal] = useState(false);
+  const [showUpgradeDialog, setShowUpgradeDialog] = useState(false);
+  const [, setLocation] = useLocation();
 
   const { data: portfolios } = useQuery<Portfolio[]>({
     queryKey: ["/api/portfolios"],
   });
 
-  const form = useForm<EditLeapsForm>({
-    resolver: zodResolver(editLeapsSchema),
+  const form = useForm<AddStockForm>({
+    resolver: zodResolver(addStockSchema),
     defaultValues: {
       symbol: "",
-      portfolioId: null,
-      contracts: 1,
-      strike: 0,
-      expiry: "",
-      entryDebit: 0,
-      entryDelta: 0.7,
+      portfolioId: portfolios?.[0]?.id || "",
+      shares: 1,
+      entryPrice: 0,
       notes: "",
     },
   });
 
   useEffect(() => {
-    if (position && open) {
-      const expiryDate = new Date(position.expiry);
+    if (open && initialValues) {
       form.reset({
-        symbol: position.symbol,
-        portfolioId: position.portfolioId || null,
-        contracts: position.contracts || 1,
-        strike: position.shortStrike ?? undefined,
-        expiry: format(expiryDate, "yyyy-MM-dd"),
-        entryDebit: (position.entryDebitCents || 0) / 100,
-        entryDelta: position.entryDelta || 0.7,
-        notes: position.notes || "",
+        symbol: initialValues.symbol || "",
+        portfolioId: initialValues.portfolioId || portfolios?.[0]?.id || "",
+        shares: initialValues.shares || 1,
+        entryPrice: initialValues.entryPrice || 0,
+        notes: initialValues.notes || "",
+      });
+    } else if (open && !initialValues) {
+      form.reset({
+        symbol: "",
+        portfolioId: portfolios?.[0]?.id || "",
+        shares: 1,
+        entryPrice: 0,
+        notes: "",
       });
     }
-  }, [position, open, form]);
+  }, [open, initialValues, form, portfolios]);
 
   const mutation = useMutation({
-    mutationFn: async (data: EditLeapsForm) => {
-      if (!position) throw new Error("No position selected");
-      
-      const response = await apiRequest("PATCH", `/api/positions/${position.id}`, {
-        symbol: data.symbol,
-        portfolioId: data.portfolioId,
-        contracts: data.contracts,
-        shortStrike: data.strike,
-        longStrike: null,
-        expiry: new Date(data.expiry),
-        entryCreditCents: null,
-        entryDebitCents: Math.round(data.entryDebit * 100),
-        entryDelta: data.entryDelta,
-        notes: data.notes,
-      });
-      return response.json();
+    mutationFn: async (data: AddStockForm) => {
+      if (executingOrderId) {
+        const response = await apiRequest("PATCH", `/api/positions/${executingOrderId}`, {
+          portfolioId: data.portfolioId,
+          contracts: data.shares,
+          entryDebitCents: Math.round(data.entryPrice * 100),
+          notes: data.notes,
+          status: "open",
+        });
+        return response.json();
+      } else {
+        const response = await apiRequest("POST", "/api/positions", {
+          symbol: data.symbol,
+          portfolioId: data.portfolioId,
+          contracts: data.shares,
+          strategyType: "STOCK",
+          type: "LONG",
+          shortStrike: 0,
+          longStrike: null,
+          expiry: new Date("2099-12-31"),
+          entryCreditCents: null,
+          entryDebitCents: Math.round(data.entryPrice * 100),
+          entryDelta: null,
+          notes: data.notes,
+          status,
+        });
+        return response.json();
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/positions"] });
@@ -102,32 +123,34 @@ export default function EditLeapsModal({ open, onOpenChange, position }: EditLea
       queryClient.invalidateQueries({ queryKey: ["/api/positions/pnl"] });
       queryClient.invalidateQueries({ queryKey: ["/api/positions/ticker-prices"] });
       toast({
-        title: "LEAPS Position Updated",
-        description: "Position has been updated successfully",
+        title: executingOrderId ? "Order Executed" : "Stock Position Added",
+        description: executingOrderId
+          ? "Order has been executed and moved to open positions"
+          : status === "order" ? "Order has been added successfully" : "Stock position has been added successfully",
       });
+      form.reset();
       onOpenChange(false);
     },
     onError: (error: Error) => {
+      const errorMsg = error.message || "";
+      if (errorMsg.includes("Free tier limited") || errorMsg.includes("Upgrade to Pro")) {
+        onOpenChange(false);
+        setShowUpgradeDialog(true);
+        return;
+      }
       toast({
         title: "Error",
-        description: error.message,
+        description: errorMsg,
         variant: "destructive",
       });
     },
   });
 
-  const watchStrike = form.watch("strike");
-  const watchDebit = form.watch("entryDebit");
-  const watchContracts = form.watch("contracts") || 1;
-  const watchExpiry = form.watch("expiry");
+  const watchPrice = form.watch("entryPrice");
+  const watchShares = form.watch("shares") || 1;
+  const totalCost = watchPrice ? watchPrice * watchShares : 0;
 
-  const maxLossPerContract = watchDebit ? watchDebit * 100 : 0;
-  const maxLoss = maxLossPerContract * watchContracts;
-  const breakEven = watchStrike && watchDebit ? watchStrike + watchDebit : 0;
-  
-  const dte = calculateDte(watchExpiry);
-
-  const onSubmit = (data: EditLeapsForm) => {
+  const onSubmit = (data: AddStockForm) => {
     if (isPreLoginMode) {
       setShowAuthModal(true);
       return;
@@ -139,7 +162,11 @@ export default function EditLeapsModal({ open, onOpenChange, position }: EditLea
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Edit LEAPS Position</DialogTitle>
+          <DialogTitle>
+            {executingOrderId
+              ? "Execute Stock Order"
+              : status === "order" ? "Add Stock Order" : "Add Stock Position"}
+          </DialogTitle>
         </DialogHeader>
 
         <Form {...form}>
@@ -156,7 +183,9 @@ export default function EditLeapsModal({ open, onOpenChange, position }: EditLea
                         {...field}
                         placeholder="AAPL"
                         className="uppercase mono"
-                        data-testid="input-edit-leaps-symbol"
+                        data-testid="input-stock-symbol"
+                        disabled={!!executingOrderId}
+                        readOnly={!!executingOrderId}
                       />
                     </FormControl>
                     <FormMessage />
@@ -170,9 +199,9 @@ export default function EditLeapsModal({ open, onOpenChange, position }: EditLea
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Account</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value || undefined}>
+                    <Select onValueChange={field.onChange} value={field.value}>
                       <FormControl>
-                        <SelectTrigger data-testid="select-edit-leaps-portfolio">
+                        <SelectTrigger data-testid="select-stock-portfolio">
                           <SelectValue placeholder="Select account" />
                         </SelectTrigger>
                       </FormControl>
@@ -197,32 +226,10 @@ export default function EditLeapsModal({ open, onOpenChange, position }: EditLea
             <div className="grid grid-cols-2 gap-4">
               <FormField
                 control={form.control}
-                name="strike"
+                name="shares"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Strike Price</FormLabel>
-                    <FormControl>
-                      <Input
-                        type="number"
-                        step="0.01"
-                        value={field.value || ""}
-                        onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)}
-                        placeholder="160.00"
-                        className="mono"
-                        data-testid="input-edit-leaps-strike"
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="contracts"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>No. of Contracts</FormLabel>
+                    <FormLabel>No. of Shares</FormLabel>
                     <FormControl>
                       <Input
                         type="number"
@@ -231,54 +238,7 @@ export default function EditLeapsModal({ open, onOpenChange, position }: EditLea
                         value={field.value || 1}
                         onChange={(e) => field.onChange(parseInt(e.target.value) || 1)}
                         className="mono"
-                        data-testid="input-edit-leaps-contracts"
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </div>
-
-            <FormField
-              control={form.control}
-              name="expiry"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Expiry Date</FormLabel>
-                  <FormControl>
-                    <Input {...field} type="date" data-testid="input-edit-leaps-expiry" />
-                  </FormControl>
-                  {dte !== null && (
-                    <FormDescription data-testid="text-dte">
-                      {dte < 0 ? (
-                        <span className="text-destructive">Expired {Math.abs(dte)} days ago</span>
-                      ) : (
-                        <span>{dte} days to expiration (DTE)</span>
-                      )}
-                    </FormDescription>
-                  )}
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <div className="grid grid-cols-2 gap-4">
-              <FormField
-                control={form.control}
-                name="entryDebit"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Entry Debit (per share)</FormLabel>
-                    <FormControl>
-                      <Input
-                        type="number"
-                        step="0.01"
-                        value={field.value || ""}
-                        onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)}
-                        placeholder="12.50"
-                        className="mono"
-                        data-testid="input-edit-leaps-debit"
+                        data-testid="input-stock-shares"
                       />
                     </FormControl>
                     <FormMessage />
@@ -288,21 +248,19 @@ export default function EditLeapsModal({ open, onOpenChange, position }: EditLea
 
               <FormField
                 control={form.control}
-                name="entryDelta"
+                name="entryPrice"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Entry Delta</FormLabel>
+                    <FormLabel>Entry Price (per share)</FormLabel>
                     <FormControl>
                       <Input
                         type="number"
                         step="0.01"
-                        min="0"
-                        max="1"
                         value={field.value || ""}
                         onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)}
-                        placeholder="0.70"
+                        placeholder="150.00"
                         className="mono"
-                        data-testid="input-edit-leaps-delta"
+                        data-testid="input-stock-price"
                       />
                     </FormControl>
                     <FormMessage />
@@ -315,20 +273,20 @@ export default function EditLeapsModal({ open, onOpenChange, position }: EditLea
               <h4 className="font-medium text-sm mb-3">Calculated Values</h4>
               <div className="grid grid-cols-2 gap-4 text-sm">
                 <div>
-                  <p className="text-muted-foreground mb-1">Max Loss</p>
-                  <p className="font-semibold mono text-muted-foreground" data-testid="text-edit-leaps-max-loss">${maxLoss.toFixed(2)}</p>
+                  <p className="text-muted-foreground mb-1">Total Cost</p>
+                  <p className="font-semibold mono" data-testid="text-stock-total-cost">${totalCost.toFixed(2)}</p>
                 </div>
                 <div>
                   <p className="text-muted-foreground mb-1">Max Gain</p>
-                  <p className="font-semibold mono text-success" data-testid="text-edit-leaps-max-gain">Unlimited</p>
+                  <p className="font-semibold mono text-success" data-testid="text-stock-max-gain">Unlimited</p>
                 </div>
                 <div>
-                  <p className="text-muted-foreground mb-1">Break-Even</p>
-                  <p className="font-semibold mono" data-testid="text-edit-leaps-breakeven">${breakEven.toFixed(2)}</p>
+                  <p className="text-muted-foreground mb-1">Max Loss</p>
+                  <p className="font-semibold mono text-muted-foreground" data-testid="text-stock-max-loss">${totalCost.toFixed(2)}</p>
                 </div>
                 <div>
                   <p className="text-muted-foreground mb-1">Type</p>
-                  <p className="font-semibold mono">Long CALL</p>
+                  <p className="font-semibold mono">Long Stock</p>
                 </div>
               </div>
             </div>
@@ -343,9 +301,9 @@ export default function EditLeapsModal({ open, onOpenChange, position }: EditLea
                     <Textarea
                       {...field}
                       rows={3}
-                      placeholder="Add any notes about this LEAPS position..."
+                      placeholder="Add any notes about this stock position..."
                       className="resize-none"
-                      data-testid="input-edit-leaps-notes"
+                      data-testid="input-stock-notes"
                     />
                   </FormControl>
                   <FormMessage />
@@ -358,18 +316,42 @@ export default function EditLeapsModal({ open, onOpenChange, position }: EditLea
                 type="button"
                 variant="outline"
                 onClick={() => onOpenChange(false)}
-                data-testid="button-edit-leaps-cancel"
+                data-testid="button-stock-cancel"
               >
                 Cancel
               </Button>
-              <Button type="submit" disabled={mutation.isPending} data-testid="button-edit-leaps-submit">
-                {mutation.isPending ? "Updating..." : "Update Position"}
+              <Button type="submit" disabled={mutation.isPending} data-testid="button-stock-submit">
+                {mutation.isPending
+                  ? (executingOrderId ? "Executing..." : "Adding...")
+                  : (executingOrderId ? "Execute Order to Position" : (status === "order" ? "Add Order" : "Add Stock Position"))}
               </Button>
             </div>
           </form>
         </Form>
       </DialogContent>
       <AuthModal open={showAuthModal} onOpenChange={setShowAuthModal} />
+
+      <AlertDialog open={showUpgradeDialog} onOpenChange={setShowUpgradeDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <div className="flex items-center gap-3 mb-2">
+              <div className="p-3 bg-primary/10 rounded-lg">
+                <Crown className="h-6 w-6 text-primary" />
+              </div>
+              <AlertDialogTitle className="text-2xl">Upgrade to Pro</AlertDialogTitle>
+            </div>
+            <AlertDialogDescription className="text-base pt-4">
+              You've reached the free tier limit of 5 positions. Upgrade to Pro for unlimited positions.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={() => { setShowUpgradeDialog(false); setLocation('/subscription'); }}>
+              Upgrade to Pro - $9/month
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Dialog>
   );
 }

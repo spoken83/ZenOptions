@@ -78,11 +78,11 @@ export class TelegramService {
       // Find current option prices for both legs
       const shortLeg = chain.find(opt => 
         opt.type === pos.type.toLowerCase() &&
-        Math.abs(opt.strike - pos.shortStrike) < 0.01
+        Math.abs(opt.strike - (pos.shortStrike || 0)) < 0.01
       );
-      const longLeg = chain.find(opt => 
+      const longLeg = chain.find(opt =>
         opt.type === pos.type.toLowerCase() &&
-        Math.abs(opt.strike - pos.longStrike) < 0.01
+        Math.abs(opt.strike - (pos.longStrike || 0)) < 0.01
       );
 
       let pnlDollars = null;
@@ -95,10 +95,10 @@ export class TelegramService {
         if (shortMid > 0 && longMid > 0) {
           const currentCostPerShare = Math.abs(longMid - shortMid);
           const currentCostCents = Math.round(currentCostPerShare * 100);
-          const pnlCents = pos.entryCreditCents - currentCostCents;
+          const pnlCents = (pos.entryCreditCents || 0) - currentCostCents;
           // P/L in full contract value (×100 shares)
           pnlDollars = pnlCents;
-          pnlPercent = pos.entryCreditCents > 0 ? (pnlCents / pos.entryCreditCents) * 100 : 0;
+          pnlPercent = (pos.entryCreditCents || 0) > 0 ? (pnlCents / (pos.entryCreditCents || 0)) * 100 : 0;
         }
       }
       

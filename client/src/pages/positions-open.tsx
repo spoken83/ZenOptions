@@ -27,6 +27,7 @@ import AddTradeModal from "@/components/modals/add-trade-modal";
 import AddIronCondorModal from "@/components/modals/add-iron-condor-modal";
 import AddLeapsModal from "@/components/modals/add-leaps-modal";
 import AddCoveredCallModal from "@/components/modals/add-covered-call-modal";
+import AddStockModal from "@/components/modals/add-stock-modal";
 import EditPositionModal from "@/components/modals/edit-position-modal";
 import EditIronCondorModal from "@/components/modals/edit-iron-condor-modal";
 import EditLeapsModal from "@/components/modals/edit-leaps-modal";
@@ -99,6 +100,7 @@ export default function PositionsOpen() {
   const [isAddIronCondorOpen, setIsAddIronCondorOpen] = useState(false);
   const [isAddLeapsOpen, setIsAddLeapsOpen] = useState(false);
   const [isAddCoveredCallOpen, setIsAddCoveredCallOpen] = useState(false);
+  const [isAddStockOpen, setIsAddStockOpen] = useState(false);
   const [isEditPositionOpen, setIsEditPositionOpen] = useState(false);
   const [isEditIronCondorOpen, setIsEditIronCondorOpen] = useState(false);
   const [isEditLeapsOpen, setIsEditLeapsOpen] = useState(false);
@@ -213,7 +215,15 @@ export default function PositionsOpen() {
   };
 
   const handleDuplicatePosition = (position: Position) => {
-    if (position.strategyType === 'LEAPS') {
+    if (position.strategyType === 'STOCK') {
+      setDuplicateInitialValues({
+        symbol: position.symbol,
+        entryPrice: (position.entryDebitCents || 0) / 100,
+        shares: position.contracts,
+        notes: position.notes,
+      });
+      setIsAddStockOpen(true);
+    } else if (position.strategyType === 'LEAPS') {
       setDuplicateInitialValues({
         symbol: position.symbol,
         strike: position.shortStrike,
@@ -365,8 +375,9 @@ export default function PositionsOpen() {
     if (strategyFilter === "all") return positionsList;
     if (strategyFilter === "iron_condor") return positionsList.filter(p => p.strategyType === "IRON_CONDOR");
     if (strategyFilter === "covered_call") return positionsList.filter(p => p.strategyType === "COVERED_CALL");
-    if (strategyFilter === "call_spread") return positionsList.filter(p => p.type === "CALL" && p.strategyType !== "IRON_CONDOR" && p.strategyType !== "LEAPS" && p.strategyType !== "COVERED_CALL");
-    if (strategyFilter === "put_spread") return positionsList.filter(p => p.type === "PUT" && p.strategyType !== "IRON_CONDOR" && p.strategyType !== "LEAPS");
+    if (strategyFilter === "call_spread") return positionsList.filter(p => p.type === "CALL" && p.strategyType !== "IRON_CONDOR" && p.strategyType !== "LEAPS" && p.strategyType !== "COVERED_CALL" && p.strategyType !== "STOCK");
+    if (strategyFilter === "put_spread") return positionsList.filter(p => p.type === "PUT" && p.strategyType !== "IRON_CONDOR" && p.strategyType !== "LEAPS" && p.strategyType !== "STOCK");
+    if (strategyFilter === "stock") return positionsList.filter(p => p.strategyType === "STOCK");
     return positionsList;
   };
 
@@ -400,7 +411,12 @@ export default function PositionsOpen() {
   const openLeapsPositions = sortBySymbolIfNeeded(sortByDTEIfNeeded(filterBySymbol(filterByZenStatus(
     filteredByAccountPositions.filter(p => p.strategyType === "LEAPS")
   ))));
-  
+
+  // STOCK positions - affected by zenStatus filter, symbol filter, account filter and sorting
+  const openStockPositions = sortBySymbolIfNeeded(filterBySymbol(filterByZenStatus(
+    filteredByAccountPositions.filter(p => p.strategyType === "STOCK")
+  )));
+
   // Get all positions that are linked to a LEAPS (for PMCC display)
   const linkedPositionIds = new Set(
     filteredByAccountPositions
@@ -413,13 +429,13 @@ export default function PositionsOpen() {
     return filteredByAccountPositions.filter(p => p.linkedPositionId === leapsId);
   };
   
-  // CS & IC positions - exclude linked positions (they show under their parent LEAPS)
+  // CS & IC positions - exclude linked positions (they show under their parent LEAPS) and STOCK
   const openPositions = sortBySymbolIfNeeded(sortByDTEIfNeeded(filterBySymbol(filterByZenStatus(filterByStrategy(
-    filteredByAccountPositions.filter(p => p.strategyType !== "LEAPS" && !p.linkedPositionId)
+    filteredByAccountPositions.filter(p => p.strategyType !== "LEAPS" && p.strategyType !== "STOCK" && !p.linkedPositionId)
   )))))
-  
+
   // Check if filters resulted in no matches (has positions but filtered out)
-  const filtersResultedInNoMatches = hasAnyPositions && hasActiveFilters && openPositions.length === 0 && openLeapsPositions.length === 0;
+  const filtersResultedInNoMatches = hasAnyPositions && hasActiveFilters && openPositions.length === 0 && openLeapsPositions.length === 0 && openStockPositions.length === 0;
 
   const getPortfolioName = (portfolioId: string | null) => {
     if (!portfolioId || !portfolios) return "—";
@@ -749,6 +765,10 @@ export default function PositionsOpen() {
                   <span className="font-medium">Covered Call</span>
                   <span className="text-xs text-muted-foreground ml-2">for PMCC</span>
                 </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setIsAddStockOpen(true)} data-testid="menu-add-stock">
+                  <span className="font-medium">Stock</span>
+                  <span className="text-xs text-muted-foreground ml-2">Long equity</span>
+                </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
@@ -764,24 +784,54 @@ export default function PositionsOpen() {
           {/* Portfolio ZenStatus Dashboard - always show when user has any positions */}
           <PortfolioZenStatusDashboard />
 
-          <Tabs defaultValue={openPositions.length > 0 ? "credit" : "debit"} className="w-full">
-            <TabsList className="mb-6">
+          <Tabs defaultValue={openPositions.length > 0 ? "credit" : openStockPositions.length > 0 ? "stock" : "debit"} className="w-full">
+            <TabsList className="mb-4">
               <TabsTrigger value="credit">Credit Strategies ({openPositions.length})</TabsTrigger>
               <TabsTrigger value="debit">Debit Strategies ({openLeapsPositions.length})</TabsTrigger>
+              <TabsTrigger value="stock">Stock ({openStockPositions.length})</TabsTrigger>
             </TabsList>
 
+            {/* Common filters across all tabs */}
+            <div className="flex gap-2 flex-wrap mb-6">
+              <Input
+                placeholder="Filter symbol..."
+                value={symbolFilter}
+                onChange={(e) => setSymbolFilter(e.target.value)}
+                className="w-[110px] sm:w-[140px] text-xs sm:text-sm"
+              />
+              <Select value={zenStatusFilter} onValueChange={setZenStatusFilter}>
+                <SelectTrigger className="w-[110px] sm:w-[140px] text-xs sm:text-sm" data-testid="select-zenstatus-filter">
+                  <SelectValue placeholder="Status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Status</SelectItem>
+                  <SelectItem value="zen">✅ ZEN</SelectItem>
+                  <SelectItem value="profit">🎯 PROFIT</SelectItem>
+                  <SelectItem value="monitor">👁️ MONITOR</SelectItem>
+                  <SelectItem value="action">⚠️ ACTION</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select value={accountFilter} onValueChange={setAccountFilter}>
+                <SelectTrigger className="w-[130px] sm:w-[160px] text-xs sm:text-sm" data-testid="select-account-filter">
+                  <SelectValue placeholder="Account" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Accounts</SelectItem>
+                  {portfolios && portfolios.map((portfolio) => (
+                    <SelectItem key={portfolio.id} value={portfolio.id}>
+                      {getPortfolioDisplayName(portfolio)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
             <TabsContent value="credit">
-          {/* Credit Strategies - Always show filters when user has any positions */}
+          {/* Credit Strategies */}
           <div className="mb-8">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
               <h3 className="text-lg sm:text-xl font-semibold">Credit Strategies ({openPositions.length})</h3>
               <div className="flex gap-2 flex-wrap">
-                <Input
-                  placeholder="Filter symbol..."
-                  value={symbolFilter}
-                  onChange={(e) => setSymbolFilter(e.target.value)}
-                  className="w-[110px] sm:w-[140px] text-xs sm:text-sm"
-                />
                 <Select value={strategyFilter} onValueChange={setStrategyFilter}>
                   <SelectTrigger className="w-[130px] sm:w-[160px] text-xs sm:text-sm" data-testid="select-strategy-filter">
                     <SelectValue placeholder="Strategy" />
@@ -791,31 +841,6 @@ export default function PositionsOpen() {
                     <SelectItem value="iron_condor">Iron Condor</SelectItem>
                     <SelectItem value="call_spread">Call Spread</SelectItem>
                     <SelectItem value="put_spread">Put Spread</SelectItem>
-                  </SelectContent>
-                </Select>
-                <Select value={zenStatusFilter} onValueChange={setZenStatusFilter}>
-                  <SelectTrigger className="w-[110px] sm:w-[140px] text-xs sm:text-sm" data-testid="select-zenstatus-filter">
-                    <SelectValue placeholder="Status" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Status</SelectItem>
-                    <SelectItem value="zen">✅ ZEN</SelectItem>
-                    <SelectItem value="profit">🎯 PROFIT</SelectItem>
-                    <SelectItem value="monitor">👁️ MONITOR</SelectItem>
-                    <SelectItem value="action">⚠️ ACTION</SelectItem>
-                  </SelectContent>
-                </Select>
-                <Select value={accountFilter} onValueChange={setAccountFilter}>
-                  <SelectTrigger className="w-[130px] sm:w-[160px] text-xs sm:text-sm" data-testid="select-account-filter">
-                    <SelectValue placeholder="Account" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Accounts</SelectItem>
-                    {portfolios && portfolios.map((portfolio) => (
-                      <SelectItem key={portfolio.id} value={portfolio.id}>
-                        {getPortfolioDisplayName(portfolio)}
-                      </SelectItem>
-                    ))}
                   </SelectContent>
                 </Select>
               </div>
@@ -896,11 +921,11 @@ export default function PositionsOpen() {
                       let breakEven: number | null = null;
                       if (position.strategyType === "IRON_CONDOR") {
                         // Iron Condor has two BE points - show the PUT side BE (lower)
-                        breakEven = position.shortStrike - entryCredit;
+                        breakEven = (position.shortStrike || 0) - entryCredit;
                       } else if (position.type === "PUT") {
-                        breakEven = position.shortStrike - entryCredit;
+                        breakEven = (position.shortStrike || 0) - entryCredit;
                       } else if (position.type === "CALL") {
-                        breakEven = position.shortStrike + entryCredit;
+                        breakEven = (position.shortStrike || 0) + entryCredit;
                       }
 
                       // Determine row status class based on ZenStatus
@@ -1111,12 +1136,14 @@ export default function PositionsOpen() {
                               >
                                 <Trash2 size={16} />
                               </button>
-                              {/* Link to LEAPS button - only for CALL spreads with matching LEAPS */}
+                              {/* Link to LEAPS/Stock button - only for CALL spreads with matching LEAPS or STOCK */}
                               {position.type === 'CALL' && position.strategyType === 'CREDIT_SPREAD' && (() => {
-                                const matchingLeaps = openLeapsPositions.filter(
-                                  l => l.symbol === position.symbol && l.strategyType === 'LEAPS'
-                                );
-                                if (matchingLeaps.length === 0) return null;
+                                const matchingParents = [
+                                  ...openLeapsPositions.filter(l => l.symbol === position.symbol && l.strategyType === 'LEAPS'),
+                                  ...openStockPositions.filter(s => s.symbol === position.symbol),
+                                ];
+                                if (matchingParents.length === 0) return null;
+                                const matchingLeaps = matchingParents;
                                 
                                 return matchingLeaps.length === 1 ? (
                                   <button
@@ -1196,36 +1223,6 @@ export default function PositionsOpen() {
             <TabsContent value="debit">
           {/* Debit Strategies */}
           <div className="mb-8">
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
-                <h3 className="text-lg sm:text-xl font-semibold">Debit Strategies ({openLeapsPositions.length})</h3>
-                <div className="flex gap-2 flex-wrap">
-                  <Select value={zenStatusFilter} onValueChange={setZenStatusFilter}>
-                    <SelectTrigger className="w-[110px] sm:w-[140px] text-xs sm:text-sm" data-testid="select-leaps-zenstatus-filter">
-                      <SelectValue placeholder="Status" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Status</SelectItem>
-                      <SelectItem value="zen">✅ ZEN</SelectItem>
-                      <SelectItem value="profit">🎯 PROFIT</SelectItem>
-                      <SelectItem value="monitor">👁️ MONITOR</SelectItem>
-                      <SelectItem value="action">⚠️ ACTION</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <Select value={accountFilter} onValueChange={setAccountFilter}>
-                    <SelectTrigger className="w-[130px] sm:w-[160px] text-xs sm:text-sm" data-testid="select-leaps-account-filter">
-                      <SelectValue placeholder="Account" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Accounts</SelectItem>
-                      {portfolios && portfolios.map((portfolio) => (
-                        <SelectItem key={portfolio.id} value={portfolio.id}>
-                          {getPortfolioDisplayName(portfolio)}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
               <div className="bg-card border border-border rounded-lg overflow-hidden">
                 <Table>
                   <TableHeader>
@@ -1252,7 +1249,6 @@ export default function PositionsOpen() {
                       </TableHead>
                       <TableHead>Expiry</TableHead>
                       <TableHead>Strike</TableHead>
-                      <TableHead>BE</TableHead>
                       <TableHead>
                         <div>Entry Debit /</div>
                         <div>Max Loss</div>
@@ -1275,7 +1271,7 @@ export default function PositionsOpen() {
                       
                       // Calculate break even for LEAPS (CALL option)
                       const entryDebit = (position.entryDebitCents || 0) / 100;
-                      const breakEven = position.shortStrike + entryDebit;
+                      const breakEven = (position.shortStrike || 0) + entryDebit;
                       
                       // Max loss for LEAPS is the entry debit paid
                       const maxLossCents = Math.abs(position.entryDebitCents || 0);
@@ -1354,16 +1350,10 @@ export default function PositionsOpen() {
                           {/* 6. Strike */}
                           <TableCell style={{ verticalAlign: 'middle' }}>
                             <span className="text-sm font-medium">
-                              {formatCurrencySimple(position.shortStrike)}
+                              {formatCurrencySimple(position.shortStrike || 0)}
                             </span>
                           </TableCell>
-                          {/* 7. BE (Break Even) */}
-                          <TableCell style={{ verticalAlign: 'middle' }}>
-                            <span className="text-sm">
-                              {formatCurrencySimple(breakEven)}
-                            </span>
-                          </TableCell>
-                          {/* 8. Entry Debit with Max Loss below + PMCC metrics */}
+                          {/* 7. Entry Debit with Max Loss below + PMCC metrics */}
                           <TableCell style={{ verticalAlign: 'middle' }}>
                             <div>
                               <div className="font-semibold text-destructive">
@@ -1525,14 +1515,10 @@ export default function PositionsOpen() {
                               {/* 6. Strike */}
                               <TableCell style={{ verticalAlign: 'middle' }}>
                                 <span className="text-sm">
-                                  {formatCurrencySimple(linkedPos.shortStrike)}/{formatCurrencySimple(linkedPos.longStrike || 0)}
+                                  {formatCurrencySimple(linkedPos.shortStrike || 0)}
                                 </span>
                               </TableCell>
-                              {/* 7. BE - N/A for short calls */}
-                              <TableCell style={{ verticalAlign: 'middle' }}>
-                                <span className="text-xs text-muted-foreground">—</span>
-                              </TableCell>
-                              {/* 8. Credit received */}
+                              {/* 7. Credit received */}
                               <TableCell style={{ verticalAlign: 'middle' }}>
                                 <div className="text-sm text-success">
                                   +{formatCurrencySimple((linkedPos.entryCreditCents || 0) / 100)}
@@ -1586,12 +1572,11 @@ export default function PositionsOpen() {
                                     <span className="text-sm">🅲</span>
                                   </button>
                                   <button
-                                    onClick={() => unlinkPositionMutation.mutate(linkedPos.id)}
-                                    className="text-muted-foreground hover:text-warning"
-                                    title="Unlink from LEAPS"
-                                    disabled={unlinkPositionMutation.isPending}
+                                    onClick={() => handleDeletePosition(linkedPos.id, linkedPos.symbol)}
+                                    className="text-muted-foreground hover:text-destructive"
+                                    title="Delete Position"
                                   >
-                                    <X size={14} />
+                                    <Trash2 size={14} />
                                   </button>
                                 </div>
                               </TableCell>
@@ -1603,7 +1588,7 @@ export default function PositionsOpen() {
                     })}
                     {/* Subtotal Row for Debit Strategies */}
                     <TableRow className="bg-muted/30 font-semibold border-t-2 border-border">
-                      <TableCell colSpan={9} className="text-right">
+                      <TableCell colSpan={8} className="text-right">
                         Total Unrealised P/L:
                       </TableCell>
                       <TableCell className="font-semibold">
@@ -1628,6 +1613,330 @@ export default function PositionsOpen() {
               </div>
             </div>
           </TabsContent>
+
+          <TabsContent value="stock">
+          {/* Stock Positions */}
+          <div className="mb-8">
+              {openStockPositions.length === 0 ? (
+                <EmptyState
+                  title="No stock positions"
+                  description="Add your first stock position to track equity holdings alongside your options."
+                  cta={{
+                    label: "Add Stock",
+                    onClick: () => setIsAddStockOpen(true),
+                  }}
+                />
+              ) : (
+              <div className="bg-card border border-border rounded-lg overflow-hidden">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="bg-secondary/50">
+                      <TableHead>Symbol</TableHead>
+                      <TableHead>Price</TableHead>
+                      <TableHead>Strategy</TableHead>
+                      <TableHead>DTE</TableHead>
+                      <TableHead>Expiry</TableHead>
+                      <TableHead>Strike</TableHead>
+                      <TableHead>Entry</TableHead>
+                      <TableHead>Current</TableHead>
+                      <TableHead>Unrealized P/L</TableHead>
+                      <TableHead>Portfolio</TableHead>
+                      <TableHead>ZenStatus</TableHead>
+                      <TableHead>Systematic Guidance</TableHead>
+                      <TableHead>Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {openStockPositions.map((position) => {
+                      const { pl, plPercent, currentPrice, isLoading: isPnLItemLoading, error: pnlError, dataSource, zenStatus, guidanceText, guidanceDetails } = getPnL(position.id);
+                      const shares = position.contracts || 1;
+                      const tickerPrice = tickerPrices?.prices[position.symbol];
+                      // Stock: no ×100 multiplier
+                      const totalPL = pl !== null ? (dataSource === 'tiger' ? pl : pl * shares) : null;
+                      const entryPrice = (position.entryDebitCents || 0) / 100;
+                      const linkedCCs = getLinkedPositions(position.id);
+
+                      const statusClass = zenStatus?.toLowerCase() === 'zen' ? 'zen-status'
+                        : zenStatus?.toLowerCase() === 'monitor' ? 'monitor-status'
+                        : zenStatus?.toLowerCase() === 'action' ? 'action-status'
+                        : zenStatus?.toLowerCase() === 'profit' ? 'profit-status'
+                        : '';
+
+                      const portfolio = portfolios?.find(p => p.id === position.portfolioId);
+
+                      return (
+                        <Fragment key={position.id}>
+                        <TableRow className={`position-row ${statusClass}`} data-symbol={`${position.symbol}-STOCK`} data-testid={`position-${position.symbol}`}>
+                          {/* Symbol with qty badge */}
+                          <TableCell className="symbol-cell" style={{ verticalAlign: 'middle' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                              <strong>{position.symbol}</strong>
+                              <span className="qty-badge">{shares}x</span>
+                            </div>
+                          </TableCell>
+                          {/* 2. Price */}
+                          <TableCell style={{ verticalAlign: 'middle' }}>
+                            {isPricesLoading ? (
+                              <div className="text-xs text-muted-foreground">Loading...</div>
+                            ) : tickerPrice ? (
+                              <div>
+                                <div className="text-sm font-medium">
+                                  {formatCurrencySimple(tickerPrice)}
+                                </div>
+                                {(() => {
+                                  const symbolMarketData = getMarketDataForSymbol(position.symbol);
+                                  if (symbolMarketData?.change !== null && symbolMarketData?.change !== undefined) {
+                                    const change = symbolMarketData.change;
+                                    return (
+                                      <div className={`text-xs flex items-center gap-0.5 ${change >= 0 ? 'text-success' : 'text-destructive'}`}>
+                                        {change > 0 ? <TrendingUp size={10} /> : change < 0 ? <TrendingDown size={10} /> : null}
+                                        <span>{change >= 0 ? '+' : ''}{change.toFixed(2)}%</span>
+                                      </div>
+                                    );
+                                  }
+                                  return null;
+                                })()}
+                              </div>
+                            ) : (
+                              <div className="text-xs text-muted-foreground">—</div>
+                            )}
+                          </TableCell>
+                          {/* 3. Strategy */}
+                          <TableCell style={{ verticalAlign: 'middle' }}>
+                            Long Stock
+                          </TableCell>
+                          {/* DTE */}
+                          <TableCell style={{ verticalAlign: 'middle' }}>
+                            <span className="text-xs text-muted-foreground">—</span>
+                          </TableCell>
+                          {/* Expiry */}
+                          <TableCell style={{ verticalAlign: 'middle' }}>
+                            <span className="text-xs text-muted-foreground">—</span>
+                          </TableCell>
+                          {/* Strike */}
+                          <TableCell style={{ verticalAlign: 'middle' }}>
+                            <span className="text-xs text-muted-foreground">—</span>
+                          </TableCell>
+                          {/* 7. Entry price */}
+                          <TableCell style={{ verticalAlign: 'middle' }}>
+                            <div>
+                              <div className="font-semibold text-destructive">
+                                {formatCurrencySimple(entryPrice)}
+                              </div>
+                            </div>
+                          </TableCell>
+                          {/* 8. Current value per share */}
+                          <TableCell style={{ verticalAlign: 'middle' }}>
+                            {isPnLItemLoading ? (
+                              <span className="text-muted-foreground">Loading...</span>
+                            ) : currentPrice !== null ? (
+                              <span>
+                                {formatCurrencySimple(currentPrice)}
+                              </span>
+                            ) : (
+                              <span className="text-muted-foreground">—</span>
+                            )}
+                          </TableCell>
+                          {/* 9. Unrealized P/L */}
+                          <TableCell className={`profit-cell ${totalPL !== null && totalPL >= 0 ? 'positive' : 'negative'}`} style={{ verticalAlign: 'middle' }}>
+                            {isPnLItemLoading ? (
+                              <span className="text-muted-foreground">Loading...</span>
+                            ) : totalPL !== null ? (
+                              <div>
+                                <strong>
+                                  {formatCurrency(totalPL)}
+                                </strong>
+                                {plPercent !== null && (
+                                  <span className={`pct-cell ${parseFloat(plPercent) >= 0 ? 'positive' : 'negative'}`}>
+                                    {parseFloat(plPercent) >= 0 ? '+' : ''}{plPercent}%
+                                  </span>
+                                )}
+                              </div>
+                            ) : pnlError ? (
+                              <span className="text-muted-foreground">—</span>
+                            ) : (
+                              <span className="text-muted-foreground">—</span>
+                            )}
+                          </TableCell>
+                          {/* 10. Portfolio */}
+                          <TableCell style={{ verticalAlign: 'middle' }}>
+                            <span className="text-sm">{portfolio?.name || '—'}</span>
+                          </TableCell>
+                          {/* ZenStatus */}
+                          <TableCell style={{ verticalAlign: 'middle' }}>
+                            {zenStatus ? (
+                              <div className={`status-badge-compact ${zenStatus.toLowerCase()}`}>
+                                {zenStatus.toLowerCase() === 'zen' && '✅ ZEN'}
+                                {zenStatus.toLowerCase() === 'monitor' && '👁️ MONITOR'}
+                                {zenStatus.toLowerCase() === 'profit' && '🎯 PROFIT'}
+                                {zenStatus.toLowerCase() === 'action' && '⚠️ ACTION'}
+                              </div>
+                            ) : (
+                              <span className="text-muted-foreground text-xs">—</span>
+                            )}
+                          </TableCell>
+                          {/* Systematic Guidance */}
+                          <TableCell className="guidance-cell" style={{ verticalAlign: 'middle' }}>
+                            {guidanceText ? (
+                              <div className="guidance-text">
+                                {guidanceText}
+                              </div>
+                            ) : (
+                              <span className="text-muted-foreground text-xs">—</span>
+                            )}
+                          </TableCell>
+                          {/* Actions */}
+                          <TableCell style={{ verticalAlign: 'middle' }}>
+                            <div className="grid grid-cols-2 gap-1.5 w-fit">
+                              <button
+                                onClick={() => handleEditPosition(position)}
+                                className="text-primary hover:text-primary/80"
+                                title="Edit Position"
+                              >
+                                <Edit size={16} />
+                              </button>
+                              <button
+                                onClick={() => handleDuplicatePosition(position)}
+                                className="text-muted-foreground hover:text-primary"
+                                title="Duplicate Position"
+                              >
+                                <Copy size={16} />
+                              </button>
+                              <button
+                                onClick={() => handleClosePosition(position)}
+                                className="text-success hover:text-success/80"
+                                title="Close Position"
+                              >
+                                <span className="text-lg">🅲</span>
+                              </button>
+                              <button
+                                className="text-muted-foreground hover:text-destructive"
+                                onClick={() => handleDeletePosition(position.id, position.symbol)}
+                                title="Delete Position"
+                                disabled={isPreLoginMode}
+                              >
+                                <Trash2 size={16} />
+                              </button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                        {/* Linked Covered Calls */}
+                        {linkedCCs.map((linkedPos) => {
+                          const linkedPnL = getPnL(linkedPos.id);
+                          const linkedContracts = linkedPos.contracts || 1;
+                          const linkedTotalPL = linkedPnL.pl !== null
+                            ? (linkedPnL.dataSource === 'tiger' ? linkedPnL.pl : linkedPnL.pl * 100 * linkedContracts)
+                            : null;
+                          const linkedDte = calculateDTE(linkedPos.expiry);
+                          return (
+                            <TableRow key={linkedPos.id} className="bg-muted/20 border-l-4 border-l-primary/50" data-testid={`linked-position-${linkedPos.symbol}`}>
+                              {/* 1. Symbol - indented */}
+                              <TableCell className="pl-8" style={{ verticalAlign: 'middle' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                  <span className="text-xs text-muted-foreground">↳</span>
+                                  <span className="text-sm">{linkedPos.symbol}</span>
+                                  <span className="qty-badge text-xs">{linkedContracts}x</span>
+                                </div>
+                              </TableCell>
+                              {/* 2. Price */}
+                              <TableCell style={{ verticalAlign: 'middle' }}>
+                                <span className="text-xs text-muted-foreground">—</span>
+                              </TableCell>
+                              {/* 3. Strategy */}
+                              <TableCell style={{ verticalAlign: 'middle' }}>
+                                <span className="text-xs bg-primary/10 px-2 py-0.5 rounded">Short Call</span>
+                              </TableCell>
+                              {/* 4. DTE */}
+                              <TableCell style={{ verticalAlign: 'middle' }}>
+                                <span className="text-sm font-medium">{linkedDte}</span>
+                              </TableCell>
+                              {/* 5. Expiry */}
+                              <TableCell style={{ verticalAlign: 'middle' }}>
+                                <span className="text-xs">
+                                  {format(new Date(linkedPos.expiry), "dd/MM/yyyy")}
+                                </span>
+                              </TableCell>
+                              {/* 6. Strike */}
+                              <TableCell style={{ verticalAlign: 'middle' }}>
+                                <span className="text-sm">
+                                  {formatCurrencySimple(linkedPos.shortStrike || 0)}
+                                </span>
+                              </TableCell>
+                              {/* 7. Credit received */}
+                              <TableCell style={{ verticalAlign: 'middle' }}>
+                                <div className="text-sm text-success">
+                                  +{formatCurrencySimple((linkedPos.entryCreditCents || 0) / 100)}
+                                </div>
+                              </TableCell>
+                              {/* 8. Current */}
+                              <TableCell style={{ verticalAlign: 'middle' }}>
+                                {linkedPnL.currentPrice !== null ? (
+                                  <span className="text-sm">{formatCurrencySimple(linkedPnL.currentPrice)}</span>
+                                ) : (
+                                  <span className="text-xs text-muted-foreground">—</span>
+                                )}
+                              </TableCell>
+                              {/* 9. Unrealized P/L */}
+                              <TableCell style={{ verticalAlign: 'middle' }}>
+                                {linkedTotalPL !== null ? (
+                                  <span className={`text-sm font-medium ${linkedTotalPL >= 0 ? 'text-success' : 'text-destructive'}`}>
+                                    {formatCurrency(linkedTotalPL)}
+                                  </span>
+                                ) : (
+                                  <span className="text-xs text-muted-foreground">—</span>
+                                )}
+                              </TableCell>
+                              {/* 7. Portfolio */}
+                              <TableCell style={{ verticalAlign: 'middle' }}>
+                                <span className="text-xs text-muted-foreground">—</span>
+                              </TableCell>
+                              {/* 8. ZenStatus */}
+                              <TableCell style={{ verticalAlign: 'middle' }}>
+                                <span className="text-xs text-muted-foreground">—</span>
+                              </TableCell>
+                              {/* 9. Guidance */}
+                              <TableCell style={{ verticalAlign: 'middle' }}>
+                                <span className="text-xs text-muted-foreground">—</span>
+                              </TableCell>
+                              {/* 10. Actions */}
+                              <TableCell style={{ verticalAlign: 'middle' }}>
+                                <div className="grid grid-cols-2 gap-1.5 w-fit">
+                                  <button
+                                    onClick={() => handleEditPosition(linkedPos)}
+                                    className="text-primary hover:text-primary/80"
+                                    title="Edit Position"
+                                  >
+                                    <Edit size={14} />
+                                  </button>
+                                  <button
+                                    onClick={() => handleClosePosition(linkedPos)}
+                                    className="text-success hover:text-success/80"
+                                    title="Close Position"
+                                  >
+                                    <span className="text-sm">🅲</span>
+                                  </button>
+                                  <button
+                                    onClick={() => handleDeletePosition(linkedPos.id, linkedPos.symbol)}
+                                    className="text-muted-foreground hover:text-destructive"
+                                    title="Delete Position"
+                                  >
+                                    <Trash2 size={14} />
+                                  </button>
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
+                        </Fragment>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
+              )}
+            </div>
+          </TabsContent>
+
           </Tabs>
         </>
       ) : (
@@ -1674,6 +1983,10 @@ export default function PositionsOpen() {
       <AddCoveredCallModal
         open={isAddCoveredCallOpen}
         onOpenChange={setIsAddCoveredCallOpen}
+      />
+      <AddStockModal
+        open={isAddStockOpen}
+        onOpenChange={setIsAddStockOpen}
       />
       {selectedPosition && (
         <>

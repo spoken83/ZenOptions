@@ -76,14 +76,21 @@ export default function EditCloseModal({ open, onOpenChange, position }: EditClo
   if (!position) return null;
 
   const isLeaps = position.strategyType === 'LEAPS';
+  const isStock = position.strategyType === 'STOCK';
+  const isDebit = isLeaps || isStock;
   const contracts = position.contracts || 1;
-  
+
   let pl = 0;
   let plPercent = "0.0";
   let maxLoss = 0;
   let maxSpreadWidth = 0;
 
-  if (isLeaps) {
+  if (isStock) {
+    const entryDebit = (position.entryDebitCents || 0) / 100;
+    pl = (watchExit - entryDebit) * contracts;
+    plPercent = entryDebit > 0 ? (((watchExit - entryDebit) / entryDebit) * 100).toFixed(1) : "0.0";
+    maxLoss = entryDebit * contracts;
+  } else if (isLeaps) {
     const entryDebit = (position.entryDebitCents || 0) / 100;
     pl = (watchExit - entryDebit) * 100 * contracts;
     plPercent = entryDebit > 0 ? (((watchExit - entryDebit) / entryDebit) * 100).toFixed(1) : "0.0";
@@ -94,12 +101,12 @@ export default function EditCloseModal({ open, onOpenChange, position }: EditClo
     plPercent = entryCredit > 0 ? (((entryCredit - watchExit) / entryCredit) * 100).toFixed(1) : "0.0";
     
     if (position.strategyType === 'IRON_CONDOR') {
-      const putSpreadWidth = Math.abs((position.longStrike || 0) - position.shortStrike);
+      const putSpreadWidth = Math.abs((position.longStrike || 0) - (position.shortStrike || 0));
       const callSpreadWidth = Math.abs((position.callLongStrike || 0) - (position.callShortStrike || 0));
       maxSpreadWidth = Math.max(putSpreadWidth, callSpreadWidth);
       maxLoss = (maxSpreadWidth - entryCredit) * 100 * contracts;
     } else {
-      maxSpreadWidth = Math.abs(position.shortStrike - (position.longStrike || 0));
+      maxSpreadWidth = Math.abs((position.shortStrike || 0) - (position.longStrike || 0));
       maxLoss = (maxSpreadWidth - entryCredit) * 100 * contracts;
     }
   }
@@ -114,7 +121,9 @@ export default function EditCloseModal({ open, onOpenChange, position }: EditClo
         <DialogHeader>
           <DialogTitle>Edit Close</DialogTitle>
           <DialogDescription>
-            {isLeaps 
+            {isStock
+              ? "Update the sale price for this closed stock position."
+              : isLeaps
               ? "Update the exit price for this closed LEAPS position."
               : "Update the exit credit for this closed position."}
           </DialogDescription>
@@ -129,7 +138,9 @@ export default function EditCloseModal({ open, onOpenChange, position }: EditClo
             </div>
             <div>
               <p className="text-muted-foreground">Type</p>
-              {isLeaps ? (
+              {isStock ? (
+                <p className="font-semibold text-primary">Stock (Long)</p>
+              ) : isLeaps ? (
                 <p className="font-semibold text-primary">LEAPS</p>
               ) : position.strategyType === 'IRON_CONDOR' ? (
                 <p className="font-semibold text-primary">Iron Condor</p>
@@ -142,26 +153,28 @@ export default function EditCloseModal({ open, onOpenChange, position }: EditClo
               )}
             </div>
             <div>
-              <p className="text-muted-foreground">{isLeaps ? "Strike" : "Strikes"}</p>
-              {isLeaps ? (
-                <p className="font-semibold mono">${position.shortStrike.toFixed(2)}</p>
+              <p className="text-muted-foreground">{isStock ? "Shares" : isLeaps ? "Strike" : "Strikes"}</p>
+              {isStock ? (
+                <p className="font-semibold mono">{contracts}x</p>
+              ) : isLeaps ? (
+                <p className="font-semibold mono">${(position.shortStrike || 0).toFixed(2)}</p>
               ) : position.strategyType === 'IRON_CONDOR' ? (
                 <div className="space-y-1">
                   <p className="font-semibold mono text-xs text-success">
-                    P: {position.shortStrike.toFixed(2)}/{(position.longStrike || 0).toFixed(2)}
+                    P: {(position.shortStrike || 0).toFixed(2)}/{(position.longStrike || 0).toFixed(2)}
                   </p>
                   <p className="font-semibold mono text-xs text-destructive">
                     C: {(position.callShortStrike || 0).toFixed(2)}/{(position.callLongStrike || 0).toFixed(2)}
                   </p>
                 </div>
               ) : (
-                <p className="font-semibold mono">{position.shortStrike.toFixed(2)}/{(position.longStrike || 0).toFixed(2)}</p>
+                <p className="font-semibold mono">{(position.shortStrike || 0).toFixed(2)}/{(position.longStrike || 0).toFixed(2)}</p>
               )}
             </div>
             <div>
-              <p className="text-muted-foreground">{isLeaps ? "Entry Debit" : "Entry Credit"}</p>
+              <p className="text-muted-foreground">{isStock ? "Entry Price" : isLeaps ? "Entry Debit" : "Entry Credit"}</p>
               <p className="font-semibold mono">
-                ${isLeaps 
+                ${isDebit
                   ? ((position.entryDebitCents || 0) / 100).toFixed(2)
                   : ((position.entryCreditCents || 0) / 100).toFixed(2)}
               </p>
@@ -180,7 +193,7 @@ export default function EditCloseModal({ open, onOpenChange, position }: EditClo
               name="exitCredit"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>{isLeaps ? "Exit Price (per share)" : "Exit Credit ($)"}</FormLabel>
+                  <FormLabel>{isStock ? "Sale Price (per share)" : isLeaps ? "Exit Price (per share)" : "Exit Credit ($)"}</FormLabel>
                   <FormControl>
                     <Input
                       {...field}

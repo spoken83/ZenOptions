@@ -106,8 +106,8 @@ export const positions = pgTable("positions", {
   portfolioId: varchar("portfolio_id").references(() => portfolios.id),
   symbol: text("symbol").notNull(),
   contracts: integer("contracts").notNull().default(1), // Number of contracts
-  strategyType: text("strategy_type").notNull().default("CREDIT_SPREAD"), // 'CREDIT_SPREAD', 'IRON_CONDOR', 'LEAPS', or 'COVERED_CALL'
-  shortStrike: real("short_strike").notNull(), // For credit spread, this is the short strike. For IC, this is the PUT short strike. For LEAPS, this is the strike
+  strategyType: text("strategy_type").notNull().default("CREDIT_SPREAD"), // 'CREDIT_SPREAD', 'IRON_CONDOR', 'LEAPS', 'COVERED_CALL', or 'STOCK'
+  shortStrike: real("short_strike"), // For credit spread, this is the short strike. For IC, this is the PUT short strike. For LEAPS, this is the strike. NULL for STOCK
   longStrike: real("long_strike"), // For credit spread, this is the long strike. For IC, this is the PUT long strike. NULL for LEAPS
   type: text("type").notNull(), // For CREDIT_SPREAD: 'PUT' or 'CALL'. For IRON_CONDOR: always 'PUT' (but has call strikes too). For LEAPS: 'CALL'
   callShortStrike: real("call_short_strike"), // For IRON_CONDOR only
@@ -335,6 +335,7 @@ export const insertPositionSchema = createInsertSchema(positions).omit({
 }).extend({
   entryCreditCents: z.number().int().positive().nullable().optional(),
   entryDebitCents: z.number().int().positive().nullable().optional(),
+  shortStrike: z.number().nullable().optional(),
   longStrike: z.number().positive().nullable().optional(),
   entryDelta: z.number().nullable().optional(),
   expiry: z.coerce.date(),

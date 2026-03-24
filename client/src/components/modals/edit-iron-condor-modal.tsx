@@ -88,7 +88,7 @@ export default function EditIronCondorModal({ open, onOpenChange, position }: Ed
       form.reset({
         symbol: position.symbol,
         portfolioId: position.portfolioId || null,
-        putShortStrike: position.shortStrike,
+        putShortStrike: position.shortStrike ?? undefined,
         putLongStrike: position.longStrike || 0,
         callShortStrike: position.callShortStrike || 0,
         callLongStrike: position.callLongStrike || 0,

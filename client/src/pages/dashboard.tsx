@@ -143,19 +143,21 @@ export default function Dashboard() {
 
   const calculatePositionPL = (p: Position) => {
     const isLeaps = p.strategyType === "LEAPS";
-    // Non-LEAPS: NULL exit on a closed position means expired worthless (exit at $0)
-    // LEAPS: NULL exit means unknown — can't calculate P/L
+    const isStock = p.strategyType === "STOCK";
+    const isDebit = isLeaps || isStock;
+    // Non-debit: NULL exit on a closed position means expired worthless (exit at $0)
+    // Debit: NULL exit means unknown — can't calculate P/L
     if (p.exitCreditCents === null || p.exitCreditCents === undefined) {
-      if (isLeaps) return null;
+      if (isDebit) return null;
       if (p.status !== "closed") return null;
     }
     const contracts = p.contracts || 1;
-    const entryCents = isLeaps ? (p.entryDebitCents || 0) : (p.entryCreditCents || 0);
+    const entryCents = isDebit ? (p.entryDebitCents || 0) : (p.entryCreditCents || 0);
     const exitCents = p.exitCreditCents || 0;
-    // entryCreditCents/exitCreditCents store raw contract price in cents ($x.xx = xxx cents)
-    // Multiply by 100 because 1 contract = 100 shares
-    const plPerShareCents = isLeaps ? (exitCents - entryCents) : (entryCents - exitCents);
-    return plPerShareCents * 100 * contracts;
+    const plPerShareCents = isDebit ? (exitCents - entryCents) : (entryCents - exitCents);
+    // Stock: 1 share = 1 unit (no ×100). Options: 1 contract = 100 shares
+    const multiplier = isStock ? 1 : 100;
+    return plPerShareCents * multiplier * contracts;
   };
 
   const isWinner = (p: Position) => {
@@ -169,8 +171,8 @@ export default function Dashboard() {
   };
 
   const closedWithExit = closedPositions.filter(p => {
-    // Non-LEAPS closed with NULL exit = expired worthless (full profit)
-    if (p.strategyType !== "LEAPS" && p.status === "closed") return true;
+    // Non-debit closed with NULL exit = expired worthless (full profit)
+    if (p.strategyType !== "LEAPS" && p.strategyType !== "STOCK" && p.status === "closed") return true;
     return p.exitCreditCents !== null && p.exitCreditCents !== undefined;
   });
   const winners = closedWithExit.filter(isWinner);
@@ -186,8 +188,8 @@ export default function Dashboard() {
     if (winners.length === 0) return { avgPL: 0, avgPercent: 0 };
     const totalWinPL = winners.reduce((total, p) => total + (calculatePositionPL(p) || 0), 0);
     const totalWinPercent = winners.reduce((total, p) => {
-      const isLeaps = p.strategyType === "LEAPS";
-      const entryCents = isLeaps ? (p.entryDebitCents || 0) : (p.entryCreditCents || 0);
+      const isDebit = p.strategyType === "LEAPS" || p.strategyType === "STOCK";
+      const entryCents = isDebit ? (p.entryDebitCents || 0) : (p.entryCreditCents || 0);
       if (entryCents === 0) return total;
       const pl = calculatePositionPL(p) || 0;
       // entryCents is per-share, multiply by 100 for per-contract value
@@ -201,8 +203,8 @@ export default function Dashboard() {
     if (losers.length === 0) return { avgPL: 0, avgPercent: 0 };
     const totalLossPL = losers.reduce((total, p) => total + (calculatePositionPL(p) || 0), 0);
     const totalLossPercent = losers.reduce((total, p) => {
-      const isLeaps = p.strategyType === "LEAPS";
-      const entryCents = isLeaps ? (p.entryDebitCents || 0) : (p.entryCreditCents || 0);
+      const isDebit = p.strategyType === "LEAPS" || p.strategyType === "STOCK";
+      const entryCents = isDebit ? (p.entryDebitCents || 0) : (p.entryCreditCents || 0);
       if (entryCents === 0) return total;
       const pl = calculatePositionPL(p) || 0;
       // entryCents is per-share, multiply by 100 for per-contract value
@@ -222,7 +224,9 @@ export default function Dashboard() {
         const contracts = position.contracts || 1;
         const portfolio = portfolios?.find(p => p.id === position.portfolioId);
         const dataSource = portfolio?.isExternal ? 'tiger' : 'manual';
-        const positionPL = dataSource === 'tiger' ? pnl.pnlCents : pnl.pnlCents * 100 * contracts;
+        // Stock: pnlCents is per-share (no ×100). Options: pnlCents is per-share-of-option (×100 per contract)
+        const multiplier = position.strategyType === 'STOCK' ? 1 : 100;
+        const positionPL = dataSource === 'tiger' ? pnl.pnlCents : pnl.pnlCents * multiplier * contracts;
         return total + positionPL;
       }
       return total;
@@ -239,7 +243,19 @@ export default function Dashboard() {
   const WITHDRAWALS = filteredCashTransactions
     .filter(t => t.type === 'withdrawal')
     .reduce((sum, t) => sum + t.amountCents, 0) / 100;
-  const STOCK_HOLDINGS = 0;
+  // Compute stock holdings market value from open STOCK positions
+  const STOCK_HOLDINGS = (() => {
+    if (!pnlData) return 0;
+    return openPositions
+      .filter(p => p.strategyType === 'STOCK')
+      .reduce((sum, p) => {
+        const pnl = pnlData.positions.find(pp => pp.positionId === p.id);
+        const shares = p.contracts || 1;
+        // Use current market price if available, otherwise fallback to entry price
+        if (pnl?.currentCostCents) return sum + (pnl.currentCostCents * shares) / 100;
+        return sum + ((p.entryDebitCents || 0) * shares) / 100;
+      }, 0);
+  })();
 
   const calculateLeapsMarketValue = () => {
     if (!pnlData || openPositions.length === 0) return 0;
@@ -257,7 +273,8 @@ export default function Dashboard() {
 
   const calculateUnrealizedOptionsPL = () => {
     if (!pnlData || openPositions.length === 0) return 0;
-    const nonLeapsPositions = openPositions.filter(p => p.strategyType !== "LEAPS");
+    // Exclude LEAPS (tracked via market value) and STOCK (tracked via STOCK_HOLDINGS)
+    const nonLeapsPositions = openPositions.filter(p => p.strategyType !== "LEAPS" && p.strategyType !== "STOCK");
     const totalCents = nonLeapsPositions.reduce((total, position) => {
       const pnl = pnlData.positions.find(p => p.positionId === position.id);
       if (pnl && pnl.pnlCents !== null) {
@@ -281,14 +298,21 @@ export default function Dashboard() {
     .filter(p => p.strategyType === "LEAPS")
     .reduce((sum, p) => sum + (p.entryDebitCents || 0) * (p.contracts || 1), 0);
 
+  // Cost of open STOCK positions (debit paid, reduces cash)
+  // entryDebitCents is per-share in cents × shares / 100 for dollars
+  const openStockCost = openPositions
+    .filter(p => p.strategyType === "STOCK")
+    .reduce((sum, p) => sum + ((p.entryDebitCents || 0) * (p.contracts || 1)) / 100, 0);
+
   // Premiums received from open credit positions (credit spreads, ICs, covered calls)
   const openCreditPremiums = openPositions
-    .filter(p => p.strategyType !== "LEAPS")
+    .filter(p => p.strategyType !== "LEAPS" && p.strategyType !== "STOCK")
     .reduce((sum, p) => sum + (p.entryCreditCents || 0) * (p.contracts || 1), 0);
 
-  // Cash balance = deposits - withdrawals + realized P/L - LEAPS cost + credit premiums
+  // Cash balance = deposits - withdrawals + realized P/L - LEAPS cost - stock cost + credit premiums
   // openLeapsCost/openCreditPremiums are cents-per-share × contracts; ×100 shares /100 cents = just the value
-  const cashBalance = DEPOSITS - WITHDRAWALS + (realizedPL / 100) - openLeapsCost + openCreditPremiums;
+  // openStockCost is already in dollars
+  const cashBalance = DEPOSITS - WITHDRAWALS + (realizedPL / 100) - openLeapsCost - openStockCost + openCreditPremiums;
 
   // Account value = cash + LEAPS market value + unrealized options P/L (which adjusts for current credit position values)
   const netAccountValue = cashBalance
@@ -342,6 +366,7 @@ export default function Dashboard() {
 
     if (p.strategyType === "LEAPS") return "LEAPS";
     if (p.strategyType === "COVERED_CALL") return "Covered Calls";
+    if (p.strategyType === "STOCK") return "Stock";
     if (dte <= 1) return "0DTE";
     if (dte >= 38 && dte <= 55) return "45DTE";
     return null;
@@ -353,6 +378,7 @@ export default function Dashboard() {
       '45DTE': { trades: 0, pl: 0, wins: 0 },
       'Covered Calls': { trades: 0, pl: 0, wins: 0 },
       'LEAPS': { trades: 0, pl: 0, wins: 0 },
+      'Stock': { trades: 0, pl: 0, wins: 0 },
     };
 
     closedWithExit.forEach(p => {
@@ -383,8 +409,8 @@ export default function Dashboard() {
     if (filteredWinners.length === 0) return { avgPL: 0, avgPercent: 0 };
     const totalWinPL = filteredWinners.reduce((total, p) => total + (calculatePositionPL(p) || 0), 0);
     const totalWinPercent = filteredWinners.reduce((total, p) => {
-      const isLeaps = p.strategyType === "LEAPS";
-      const entryCents = isLeaps ? (p.entryDebitCents || 0) : (p.entryCreditCents || 0);
+      const isDebit = p.strategyType === "LEAPS" || p.strategyType === "STOCK";
+      const entryCents = isDebit ? (p.entryDebitCents || 0) : (p.entryCreditCents || 0);
       if (entryCents === 0) return total;
       const pl = calculatePositionPL(p) || 0;
       const entryValueCents = entryCents * 100 * (p.contracts || 1);
@@ -397,8 +423,8 @@ export default function Dashboard() {
     if (filteredLosers.length === 0) return { avgPL: 0, avgPercent: 0 };
     const totalLossPL = filteredLosers.reduce((total, p) => total + (calculatePositionPL(p) || 0), 0);
     const totalLossPercent = filteredLosers.reduce((total, p) => {
-      const isLeaps = p.strategyType === "LEAPS";
-      const entryCents = isLeaps ? (p.entryDebitCents || 0) : (p.entryCreditCents || 0);
+      const isDebit = p.strategyType === "LEAPS" || p.strategyType === "STOCK";
+      const entryCents = isDebit ? (p.entryDebitCents || 0) : (p.entryCreditCents || 0);
       if (entryCents === 0) return total;
       const pl = calculatePositionPL(p) || 0;
       const entryValueCents = entryCents * 100 * (p.contracts || 1);
@@ -418,6 +444,7 @@ export default function Dashboard() {
   const getMonthlyBucket = (p: Position): string => {
     if (p.strategyType === "LEAPS") return "LEAPS";
     if (p.strategyType === "COVERED_CALL") return "CC";
+    if (p.strategyType === "STOCK") return "Stock";
     const entry = new Date(p.entryDt);
     const expiry = new Date(p.expiry);
     const dte = Math.ceil((expiry.getTime() - entry.getTime()) / (1000 * 60 * 60 * 24));
@@ -435,7 +462,7 @@ export default function Dashboard() {
     });
 
     const closedValid = filtered.filter(p => {
-      if (p.strategyType !== "LEAPS" && p.status === "closed") return true;
+      if (p.strategyType !== "LEAPS" && p.strategyType !== "STOCK" && p.status === "closed") return true;
       return p.exitCreditCents !== null && p.exitCreditCents !== undefined;
     });
 
@@ -490,7 +517,7 @@ export default function Dashboard() {
   const monthlyStrategies = useMemo(() => {
     const allClosed = allPositions?.filter(p => p.status === "closed") || [];
     const buckets = new Set(allClosed.map(p => getMonthlyBucket(p)));
-    return ["0DTE", "45DTE", "CC", "LEAPS"].filter(s => buckets.has(s));
+    return ["0DTE", "45DTE", "CC", "LEAPS", "Stock"].filter(s => buckets.has(s));
   }, [allPositions]);
 
   const handleRefresh = () => {
@@ -878,17 +905,19 @@ export default function Dashboard() {
                   <TableBody>
                     {filteredClosedWithExit.slice(0, 10).map((position) => {
                       const pl = calculatePositionPL(position) || 0;
-                      const isLeaps = position.strategyType === "LEAPS";
-                      const entryCents = isLeaps ? (position.entryDebitCents || 0) : (position.entryCreditCents || 0);
+                      const isDebitPos = position.strategyType === "LEAPS" || position.strategyType === "STOCK";
+                      const entryCents = isDebitPos ? (position.entryDebitCents || 0) : (position.entryCreditCents || 0);
                       const contracts = position.contracts || 1;
-                      // entryCents is per-share, multiply by 100 for per-contract value
-                      const entryValueCents = entryCents * 100 * contracts;
+                      // Stock: no ×100 multiplier. Options: ×100 per contract
+                      const multiplier = position.strategyType === "STOCK" ? 1 : 100;
+                      const entryValueCents = entryCents * multiplier * contracts;
                       const plPercent = entryValueCents > 0 ? ((pl / entryValueCents) * 100) : 0;
                       
                       // Strategy display
                       const getStrategyLabel = () => {
                         if (position.strategyType === "LEAPS") return "LEAPS";
                         if (position.strategyType === "COVERED_CALL") return "CC";
+                        if (position.strategyType === "STOCK") return "Stock";
                         const bucket = getStrategyBucket(position);
                         const dtePrefix = bucket === "0DTE" ? "0DTE " : bucket === "45DTE" ? "45DTE " : "";
                         if (position.strategyType === "IRON_CONDOR") return `${dtePrefix}IC`;

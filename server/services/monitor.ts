@@ -87,6 +87,15 @@ export class MonitorService {
       const stockQuote = await marketDataService.getQuote(position.symbol);
       currentPrice = stockQuote?.price || null;
 
+      if (position.strategyType === 'STOCK') {
+        // STOCK: simple price comparison, no option chain needed, no ×100 multiplier
+        if (currentPrice && position.entryDebitCents) {
+          const currentPriceCents = Math.round(currentPrice * 100);
+          // P&L per share × shares (no ×100 multiplier for stocks)
+          pnlCents = (currentPriceCents - position.entryDebitCents) * position.contracts;
+          pnlPercent = ((currentPriceCents - position.entryDebitCents) / position.entryDebitCents) * 100;
+        }
+      } else {
       // Get option chain for spread pricing
       const expiry = new Date(position.expiry);
       const chain = await marketDataService.getOptionChain(position.symbol, expiry);
@@ -140,6 +149,7 @@ export class MonitorService {
           pnlPercent = entryCreditCents > 0 ? ((entryCreditCents - currentMidCents) / entryCreditCents) * 100 : 0;
         }
       }
+      } // end else (non-STOCK)
     } catch (error) {
       console.error(`Error enriching position ${position.id} with P/L:`, error);
     }
