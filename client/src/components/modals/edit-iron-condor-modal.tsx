@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, invalidateAfterPositionChange } from "@/lib/queryClient";
 import type { Position, Portfolio } from "@shared/schema";
 import { format } from "date-fns";
 import { AuthModal } from "@/components/auth/AuthModal";
@@ -119,12 +119,7 @@ export default function EditIronCondorModal({ open, onOpenChange, position }: Ed
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/positions"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/positions?status=open"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/positions?status=order"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/stats"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/positions/pnl"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/positions/ticker-prices"] });
+      invalidateAfterPositionChange();
       toast({
         title: "Iron Condor Updated",
         description: "Position has been updated successfully",

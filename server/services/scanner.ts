@@ -47,6 +47,11 @@ interface IronCondorCandidate {
   score: number;
 }
 
+// Preferred DTE buffer (±days from dteTarget). Trades found outside this band
+// but inside the wider scan window get flagged so the trader knows the spread
+// isn't sitting at the strategy's natural DTE.
+const DTE_PREFERRED_BUFFER = 7;
+
 // Logger class for capturing console output
 class LogCapture {
   private logs: string[] = [];
@@ -659,13 +664,26 @@ export class ScannerService {
       }
       
       logger.log(`   🏆 BEST OVERALL: ${bestOverallExpiry.toISOString().split('T')[0]} (${bestOverallIC.dte} DTE), score: ${bestOverallIC.score.toFixed(2)}`);
-      
+
+      // Flag trades that landed outside the preferred ±DTE_PREFERRED_BUFFER band
+      const icPreferredMin = dteTarget - DTE_PREFERRED_BUFFER;
+      const icPreferredMax = dteTarget + DTE_PREFERRED_BUFFER;
+      const icOutsidePreferred = bestOverallIC.dte < icPreferredMin || bestOverallIC.dte > icPreferredMax;
+      let icSignal = 'IRON CONDOR TRADE';
+      let icReason: string | null = 'Iron Condor opportunity found';
+      if (icOutsidePreferred) {
+        const note = `📍 ${bestOverallIC.dte} DTE (outside preferred ${icPreferredMin}-${icPreferredMax})`;
+        icSignal = `${icSignal} | ${note}`;
+        icReason = `${icReason} — ${note}`;
+        logger.log(`   📍 NOTE: Best DTE (${bestOverallIC.dte}) is outside preferred ${icPreferredMin}-${icPreferredMax} window`);
+      }
+
       // Return qualified Iron Condor
       return {
         symbol,
         strategyType: 'IRON_CONDOR',
         status: 'qualified',
-        reason: 'Iron Condor opportunity found',
+        reason: icReason,
         expiry: bestOverallExpiry,
         // PUT side uses existing fields
         shortStrike: bestOverallIC.putShortStrike,
@@ -685,7 +703,7 @@ export class ScannerService {
         iv: avgIv,
         expectedMove: expectedMove,
         score: bestOverallIC.score,
-        signal: 'IRON CONDOR TRADE',
+        signal: icSignal,
         batchId: this.currentBatchId || 'manual',
         analysisLog: logger.getLog(),
       };
@@ -738,7 +756,7 @@ export class ScannerService {
       maxLossBuffer: parseFloat(maxLossBuffer?.value || '0.25'),
       // DTE settings
       dteTarget: parseInt(dteTarget?.value || '45'),
-      dteBuffer: parseInt(dteBuffer?.value || '5'),
+      dteBuffer: parseInt(dteBuffer?.value || '12'),
       // Iron Condor settings
       icDeltaMin: parseFloat(icDeltaMin?.value || '0.15'),
       icDeltaMax: parseFloat(icDeltaMax?.value || '0.20'),
@@ -812,10 +830,9 @@ export class ScannerService {
       
       if (expiries.length === 0) {
         noExpiryFound = true;
-        (logger || console).log(`⚠️  WARNING: No suitable expiry found for ${symbol} in ${dteMin}-${dteMax} DTE range`);
-        (logger || console).log(`⚠️  This may indicate a Polygon API issue or data gap`);
-        (logger || console).log(`⚠️  Please verify option availability in your trading system`);
-        reason = `No suitable option expiry found in ${dteMin}-${dteMax} DTE range`;
+        (logger || console).log(`ℹ️  No listed expiries for ${symbol} fall inside ${dteMin}-${dteMax} DTE (see neighbors logged above).`);
+        (logger || console).log(`ℹ️  This is a gap in the listed option chain, not a Polygon API issue — weeklies in this window likely haven't been issued yet.`);
+        reason = `No listed option expiry in ${dteMin}-${dteMax} DTE window`;
       } else {
         // Analyze EACH expiry and track the best spread across all of them
         let bestOverallSpread: ScanCandidate | null = null;
@@ -876,7 +893,7 @@ export class ScannerService {
         (logger || console).log(`   Expiries with qualifying spreads: ${expiriesWithSpreads}`);
         
         if (bestOverallSpread && bestOverallExpiry) {
-          options = { expiry: bestOverallExpiry, dte: bestOverallDte, best: bestOverallSpread };
+          options = { expiry: bestOverallExpiry, dte: bestOverallDte, best: bestOverallSpread, dteTarget };
           state = 'TRADE';
           reason = `${side} spread qualifies`;
           (logger || console).log(`   🏆 BEST OVERALL: ${bestOverallExpiry.toISOString().split('T')[0]} (${bestOverallDte} DTE), score: ${bestOverallSpread.score.toFixed(2)}`);
@@ -1010,12 +1027,27 @@ export class ScannerService {
           expectedMove = stockPrice * iv * Math.sqrt(dte / 365);
           logger.log(`📈 Expected Move: ±$${expectedMove.toFixed(2)} (IV: ${(iv * 100).toFixed(1)}%, ${dte} DTE)`);
         }
-        
+
+        // Flag trades that landed outside the preferred ±DTE_PREFERRED_BUFFER band
+        const csDteTarget = candidate.options?.dteTarget ?? 45;
+        const csPreferredMin = csDteTarget - DTE_PREFERRED_BUFFER;
+        const csPreferredMax = csDteTarget + DTE_PREFERRED_BUFFER;
+        const csOutsidePreferred = dte > 0 && (dte < csPreferredMin || dte > csPreferredMax);
+        const dteNote = csOutsidePreferred ? ` | 📍 ${dte} DTE (outside preferred ${csPreferredMin}-${csPreferredMax})` : '';
+        if (csOutsidePreferred) {
+          logger.log(`📍 NOTE: Best DTE (${dte}) is outside preferred ${csPreferredMin}-${csPreferredMax} window`);
+        }
+
+        const baseReason = marketAlignment === 'misaligned' ? `⚠️ Misaligned with market sentiment` : null;
+        const csReason = csOutsidePreferred
+          ? `${baseReason ? baseReason + ' — ' : ''}📍 ${dte} DTE (outside preferred ${csPreferredMin}-${csPreferredMax})`
+          : baseReason;
+
       return {
         symbol,
         strategyType: 'CREDIT_SPREAD',
         status: 'qualified',
-        reason: marketAlignment === 'misaligned' ? `⚠️ Misaligned with market sentiment` : null,
+        reason: csReason,
           expiry: candidate.options?.expiry || null,
           shortStrike: candidate.options?.best?.shortStrike || null,
           longStrike: candidate.options?.best?.longStrike || null,
@@ -1030,7 +1062,7 @@ export class ScannerService {
           iv: iv,
           expectedMove: expectedMove,
           score: adjustedScore,
-          signal: `${candidate.side} TRADE CANDIDATE - ${candidate.reason}${marketAlignment === 'aligned' ? ' ✅' : marketAlignment === 'misaligned' ? ' ⚠️' : ''}`,
+          signal: `${candidate.side} TRADE CANDIDATE - ${candidate.reason}${marketAlignment === 'aligned' ? ' ✅' : marketAlignment === 'misaligned' ? ' ⚠️' : ''}${dteNote}`,
           batchId: this.currentBatchId || 'manual',
           analysisLog: logger.getLog(),
         };

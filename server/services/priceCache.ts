@@ -344,13 +344,13 @@ class PriceCacheService {
    * Get option chain for a (symbol, expiry) pair with 5-minute caching.
    * Prevents repeated Polygon API calls on every P&L page load.
    */
-  async getOptionChain(symbol: string, expiryDate: Date): Promise<any[]> {
+  async getOptionChain(symbol: string, expiryDate: Date, ttlMs: number = this.OPTION_CHAIN_TTL_MS): Promise<any[]> {
     const key = `${symbol}_${expiryDate.toISOString().split('T')[0]}`;
     const cached = this.optionChainCache.get(key);
 
     if (cached) {
       const age = Date.now() - cached.lastUpdate.getTime();
-      if (age < this.OPTION_CHAIN_TTL_MS) {
+      if (age < ttlMs) {
         return cached.chain;
       }
     }

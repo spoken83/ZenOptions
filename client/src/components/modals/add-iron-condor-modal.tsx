@@ -13,7 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, invalidateAfterPositionChange } from "@/lib/queryClient";
 import type { Portfolio } from "@shared/schema";
 import { AuthModal } from "@/components/auth/AuthModal";
 import { Crown } from "lucide-react";
@@ -167,12 +167,7 @@ export default function AddIronCondorModal({ open, onOpenChange, status = "open"
       }
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/positions"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/positions?status=open"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/positions?status=order"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/stats"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/positions/pnl"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/positions/ticker-prices"] });
+      invalidateAfterPositionChange();
       toast({
         title: executingOrderId ? "Order Executed" : "Iron Condor Added",
         description: executingOrderId 

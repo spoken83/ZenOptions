@@ -41,7 +41,7 @@ import {
 import { ChevronDown } from "lucide-react";
 import { format } from "date-fns";
 import { toZonedTime } from "date-fns-tz";
-import { queryClient, apiRequest } from "@/lib/queryClient";
+import { queryClient, apiRequest, invalidateAfterPositionChange } from "@/lib/queryClient";
 import PositionsSubnav from "@/components/layout/positions-subnav";
 
 interface PositionPnL {
@@ -114,10 +114,8 @@ export default function PositionsPending() {
       return await res.json();
     },
     onSuccess: (data: any) => {
-      queryClient.invalidateQueries({ queryKey: ['/api/positions'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/portfolios'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/positions/pnl?status=order'] });
-      
+      invalidateAfterPositionChange();
+
       const parts = [];
       if (data.imported > 0) parts.push(`${data.imported} new`);
       if (data.updated > 0) parts.push(`${data.updated} updated`);
@@ -398,10 +396,19 @@ export default function PositionsPending() {
     return { pl: null, plPercent: null, currentPrice: null, isLoading: false, error: 'Unknown error', dataSource: null };
   };
 
-  const handleRefreshPrices = () => {
-    queryClient.invalidateQueries({ queryKey: ["/api/positions/pnl?status=order"] });
-    queryClient.invalidateQueries({ queryKey: ["/api/positions/ticker-prices"] });
-    refetchPnL();
+  const handleRefreshPrices = async () => {
+    try {
+      const [pnlRes, pricesRes] = await Promise.all([
+        apiRequest("GET", "/api/positions/pnl?status=order&force=true"),
+        apiRequest("GET", "/api/positions/ticker-prices?status=order&force=true"),
+      ]);
+      const [pnl, prices] = await Promise.all([pnlRes.json(), pricesRes.json()]);
+      queryClient.setQueryData(["/api/positions/pnl?status=order"], pnl);
+      queryClient.setQueryData(["/api/positions/ticker-prices?status=order"], prices);
+    } catch (err) {
+      console.error("Failed to refresh prices:", err);
+      invalidateAfterPositionChange();
+    }
   };
 
   const handleDTESort = () => {
@@ -441,10 +448,7 @@ export default function PositionsPending() {
       return res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/positions?status=order"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/positions"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/positions/pnl?status=order"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/positions/ticker-prices"] });
+      invalidateAfterPositionChange();
       toast({
         title: "Order Deleted",
         description: "The pending order has been removed",

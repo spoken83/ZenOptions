@@ -19,3 +19,5 @@ current_tables.txt
 pre_migration_row_counts.txt
 schema_before_migration.txt
 dev.pid
+attached_assets/
+

@@ -412,8 +412,20 @@ export class MarketDataService {
         return `${e.toISOString().split('T')[0]} (${dte}d)`;
       });
       console.log(`   📋 Expiries to analyze: ${expiryInfo.join(', ')}`);
+    } else {
+      // Nothing in window — log the nearest expiries either side so the gap is visible.
+      let below: { date: Date; dte: number } | null = null;
+      let above: { date: Date; dte: number } | null = null;
+      for (const expiry of expiries) {
+        const dte = Math.floor((expiry.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+        if (dte < minDTE) below = { date: expiry, dte };
+        else if (dte > maxDTE && !above) { above = { date: expiry, dte }; break; }
+      }
+      const belowStr = below ? `${below.date.toISOString().split('T')[0]} (${below.dte}d)` : 'none';
+      const aboveStr = above ? `${above.date.toISOString().split('T')[0]} (${above.dte}d)` : 'none';
+      console.log(`   📋 Nearest expiries outside window: below=${belowStr}, above=${aboveStr}`);
     }
-    
+
     return validExpiries;
   }
 

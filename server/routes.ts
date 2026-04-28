@@ -289,6 +289,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
 
+      // ?force=true bypasses the in-memory price cache (used by the manual
+      // refresh button so the user can pull a truly fresh quote).
+      const force = req.query.force === 'true';
+
       // Fetch positions for all requested statuses
       const positionsPromises = statuses.map(status =>
         storage.getPositions(userId, status)
@@ -303,8 +307,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Get unique symbols
       const symbols = Array.from(new Set(positions.map(p => p.symbol)));
 
-      // Fetch prices using cache (60s TTL)
-      const pricesMap = await priceCacheService.getPrices(symbols, 60 * 1000);
+      // Cache: 60s TTL by default, 0 (always refetch) when ?force=true.
+      const pricesMap = await priceCacheService.getPrices(symbols, force ? 0 : 60 * 1000);
 
       // Convert to object map
       const prices: Record<string, number | null> = {};
@@ -326,15 +330,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const userId = await getEffectiveUserId(req);
       const status = (req.query.status as string) || 'open';
+      // ?force=true bypasses both the stock-quote cache (60s) and the option-
+      // chain cache (5min) so the manual refresh button gets fresh Polygon data.
+      // Tiger positions still use their stored values — Tiger sync is separate.
+      const force = req.query.force === 'true';
       const positions = await storage.getPositions(userId, status);
 
       if (positions.length === 0) {
         return res.json({ positions: [], lastUpdated: new Date().toISOString() });
       }
 
-      // Separate Tiger positions from manual positions
-      const tigerPositions = positions.filter(p => p.dataSource === 'tiger');
-      const manualPositions = positions.filter(p => p.dataSource !== 'tiger');
+      // Treat a position as Tiger only if its portfolio is an actual external
+      // Tiger account (has accountNumber). A position can have dataSource='tiger'
+      // baked in from a past sync but live in a manual portfolio now (e.g. user
+      // moved it) — those should fall back to live Polygon prices, not stale
+      // Tiger DB snapshots.
+      const userPortfolios = await storage.getPortfolios(userId);
+      const tigerPortfolioIds = new Set(
+        userPortfolios
+          .filter(p => p.isExternal && p.accountNumber && p.accountNumber.length > 0)
+          .map(p => p.id),
+      );
+      const isLiveTigerPosition = (p: typeof positions[number]) =>
+        p.dataSource === 'tiger' && !!p.portfolioId && tigerPortfolioIds.has(p.portfolioId);
+
+      const tigerPositions = positions.filter(isLiveTigerPosition);
+      const manualPositions = positions.filter(p => !isLiveTigerPosition(p));
 
       // For Tiger positions, use their stored data directly
       const tigerPnlResults = tigerPositions.map(pos => {
@@ -379,7 +400,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Fetch stock quotes for STOCK positions
       const stockSymbols = [...new Set(stockPositions.map(p => p.symbol))];
-      const stockPriceMap = await priceCacheService.getPrices(stockSymbols);
+      const stockPriceMap = await priceCacheService.getPrices(stockSymbols, force ? 0 : 60 * 1000);
 
       const stockPnlResults = stockPositions.map(pos => {
         const currentPriceDollars = stockPriceMap.get(pos.symbol);
@@ -427,7 +448,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           const [symbol, expiryStr] = key.split('_');
           try {
             const expiryDate = new Date(expiryStr);
-            const chain = await priceCacheService.getOptionChain(symbol, expiryDate);
+            const chain = await priceCacheService.getOptionChain(symbol, expiryDate, force ? 0 : 5 * 60 * 1000);
             optionChainCache[key] = chain;
           } catch (error) {
             console.error(`Error fetching option chain for ${symbol} ${expiryStr}:`, error);
@@ -1002,10 +1023,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Map positions to our schema
       const mappedPositions = tigerPositionMapper.mapPositions(tigerResponse.positions || []);
 
-      // Get ALL open positions to match against (not just Tiger-sourced ones)
-      // This prevents duplicates when a position was manually created before syncing
+      // Match only against positions already in the Tiger portfolio (or with
+      // no portfolio assigned). Without this scope, a manual position in
+      // another portfolio that happens to share symbol+strikes+expiry would
+      // get hijacked by Tiger sync, get its portfolioId rewritten, and from
+      // then on hold a frozen Tiger snapshot that never updates again.
       const allPositions = await storage.getPositions(user.id, 'open');
-      const tigerPositions = allPositions;
+      const tigerPositions = allPositions.filter(p =>
+        !p.portfolioId || p.portfolioId === tigerPortfolio.id
+      );
 
       console.log(`📊 Found ${tigerPositions.length} existing Tiger positions in DB`);
       if (tigerPositions.length > 0) {

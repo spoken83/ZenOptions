@@ -43,7 +43,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { format } from "date-fns";
 import { toZonedTime } from "date-fns-tz";
-import { queryClient, apiRequest } from "@/lib/queryClient";
+import { queryClient, apiRequest, invalidateAfterPositionChange } from "@/lib/queryClient";
 import PositionsSubnav from "@/components/layout/positions-subnav";
 
 interface PositionPnL {
@@ -125,10 +125,8 @@ export default function PositionsOpen() {
       return await res.json();
     },
     onSuccess: (data: any) => {
-      queryClient.invalidateQueries({ queryKey: ['/api/positions'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/portfolios'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/positions/pnl'] });
-      
+      invalidateAfterPositionChange();
+
       const parts = [];
       if (data.imported > 0) parts.push(`${data.imported} new`);
       if (data.updated > 0) parts.push(`${data.updated} updated`);
@@ -156,7 +154,7 @@ export default function PositionsOpen() {
       return await res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/positions'] });
+      invalidateAfterPositionChange();
       toast({
         title: "Position Linked",
         description: "Short call linked to LEAPS for PMCC tracking",
@@ -178,7 +176,7 @@ export default function PositionsOpen() {
       return await res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/positions'] });
+      invalidateAfterPositionChange();
       toast({
         title: "Position Unlinked",
         description: "Short call unlinked from LEAPS",
@@ -513,10 +511,23 @@ export default function PositionsOpen() {
     return { pl: null, plPercent: null, currentPrice: null, isLoading: false, error: 'Unknown error', dataSource: null };
   };
 
-  const handleRefreshPrices = () => {
-    queryClient.invalidateQueries({ queryKey: ["/api/positions/pnl"] });
-    queryClient.invalidateQueries({ queryKey: ["/api/positions/ticker-prices"] });
-    refetchPnL();
+  const handleRefreshPrices = async () => {
+    // Bypass the in-memory price+chain cache by hitting the routes with
+    // ?force=true, then write the fresh response straight into React Query
+    // so the table updates without a second round-trip.
+    try {
+      const [pnlRes, pricesRes] = await Promise.all([
+        apiRequest("GET", "/api/positions/pnl?force=true"),
+        apiRequest("GET", "/api/positions/ticker-prices?status=open&force=true"),
+      ]);
+      const [pnl, prices] = await Promise.all([pnlRes.json(), pricesRes.json()]);
+      queryClient.setQueryData(["/api/positions/pnl"], pnl);
+      queryClient.setQueryData(["/api/positions/ticker-prices?status=open"], prices);
+    } catch (err) {
+      console.error("Failed to refresh prices:", err);
+      // Fall back to a normal invalidate so the user still gets a refetch.
+      invalidateAfterPositionChange();
+    }
   };
 
   const handleDTESort = () => {
@@ -554,14 +565,8 @@ export default function PositionsOpen() {
       const res = await apiRequest("POST", `/api/positions/${id}/delete`);
       return res.json();
     },
-    onSuccess: (_data, deletedId) => {
-      // Optimistically update the cache by removing the deleted position
-      queryClient.setQueryData<Position[]>(["/api/positions"], (old) => {
-        return old ? old.filter(p => p.id !== deletedId) : [];
-      });
-      
-      // Also invalidate to ensure fresh data on next fetch
-      queryClient.invalidateQueries({ queryKey: ["/api/positions/pnl"] });
+    onSuccess: () => {
+      invalidateAfterPositionChange();
     }
   });
 

@@ -8,7 +8,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDes
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, invalidateAfterPositionChange } from "@/lib/queryClient";
 import type { Position } from "@shared/schema";
 
 const editCloseSchema = z.object({
@@ -52,9 +52,7 @@ export default function EditCloseModal({ open, onOpenChange, position }: EditClo
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/positions"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/stats"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/positions/pnl"] });
+      invalidateAfterPositionChange();
       toast({
         title: "Close Updated",
         description: "Exit credit has been updated successfully",

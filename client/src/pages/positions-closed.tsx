@@ -4,7 +4,7 @@ import { Edit, Trash2, TrendingUp, BarChart3, Calendar, Search } from "lucide-re
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { PageSEO } from "@/components/seo/PageSEO";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { apiRequest, queryClient, invalidateAfterPositionChange } from "@/lib/queryClient";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import {
@@ -198,7 +198,7 @@ export default function PositionsClosed() {
       return res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/positions?status=closed"] });
+      invalidateAfterPositionChange();
       toast({
         title: "Position Deleted",
         description: "The position has been deleted successfully.",

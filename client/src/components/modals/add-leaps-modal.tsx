@@ -13,7 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, invalidateAfterPositionChange } from "@/lib/queryClient";
 import { format } from "date-fns";
 import type { Portfolio } from "@shared/schema";
 import { AuthModal } from "@/components/auth/AuthModal";
@@ -138,12 +138,7 @@ export default function AddLeapsModal({ open, onOpenChange, status = "open", ini
       }
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/positions"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/positions?status=open"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/positions?status=order"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/stats"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/positions/pnl"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/positions/ticker-prices"] });
+      invalidateAfterPositionChange();
       toast({
         title: executingOrderId ? "Order Executed" : "LEAPS Position Added",
         description: executingOrderId 

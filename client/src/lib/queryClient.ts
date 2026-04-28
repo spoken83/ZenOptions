@@ -55,3 +55,19 @@ export const queryClient = new QueryClient({
     },
   },
 });
+
+// Position queries use full URLs (often with querystrings) as their keys —
+// e.g. ["/api/positions?status=open"], ["/api/positions/pnl?status=order"].
+// `invalidateQueries({ queryKey: ["/api/positions"] })` does NOT match those
+// because TanStack Query does element-by-element equality on key arrays.
+// This helper invalidates anything position-related in one call so callers
+// can't forget a variant.
+export function invalidateAfterPositionChange() {
+  return queryClient.invalidateQueries({
+    predicate: (q) => {
+      const k = q.queryKey[0];
+      if (typeof k !== "string") return false;
+      return k.startsWith("/api/positions") || k === "/api/portfolios" || k === "/api/stats";
+    },
+  });
+}

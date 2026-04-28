@@ -1291,7 +1291,7 @@ export const DEFAULT_SETTINGS = [
   { key: 'scan_max_loss_buffer', value: '0.25' }, // 25%
   // Scan Parameters - DTE
   { key: 'scan_dte_target', value: '45' },
-  { key: 'scan_dte_buffer', value: '5' }, // ±5 days = 40-50 DTE
+  { key: 'scan_dte_buffer', value: '12' }, // ±12 days = 33-57 DTE (preferred band ±7 = 38-52)
   // Scan Parameters - Iron Condors
   { key: 'scan_ic_delta_min', value: '0.15' },
   { key: 'scan_ic_delta_max', value: '0.20' },

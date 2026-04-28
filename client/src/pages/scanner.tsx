@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState, useEffect, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { RefreshCw, CheckCircle, AlertTriangle, Info, ChartLine, Calendar, ChevronDown, ChevronRight, Settings, Plus, Crown, BarChart3, Eye, Clock, AlertCircle, TrendingUp } from "lucide-react";
 import { differenceInDays, differenceInHours } from "date-fns";
@@ -398,6 +398,21 @@ export default function Scanner() {
     },
   });
 
+  // Auto-refresh scan results when a scan finishes — covers scheduler-triggered
+  // and Telegram-triggered scans, not just the UI "Run Scan" button (which has
+  // its own onSuccess invalidation in runScanMutation).
+  const wasScanningRef = useRef(false);
+  useEffect(() => {
+    const isScanning = scanStatus?.isScanning ?? false;
+    if (wasScanningRef.current && !isScanning) {
+      queryClient.invalidateQueries({ queryKey: ["/api/scan-results/latest"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/scan-results/batches"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/scan-results/grouped-by-symbol"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/stats"] });
+    }
+    wasScanningRef.current = isScanning;
+  }, [scanStatus?.isScanning]);
+
   // Fetch watchlist to check for empty state
   const { data: watchlistData } = useQuery<{ id: string; symbol: string }[]>({
     queryKey: ["/api/watchlist"],
@@ -616,7 +631,7 @@ export default function Scanner() {
       scanMaxLossBuffer: 0.25,
       // DTE defaults
       scanDteTarget: 45,
-      scanDteBuffer: 5,
+      scanDteBuffer: 12,
       // Iron Condor defaults
       scanIcDeltaMin: 0.15,
       scanIcDeltaMax: 0.20,
@@ -658,7 +673,7 @@ export default function Scanner() {
         scanMaxLossBuffer: scanMaxLossBuffer ? parseFloat(scanMaxLossBuffer.value) : 0.25,
         // DTE values
         scanDteTarget: scanDteTarget ? parseInt(scanDteTarget.value) : 45,
-        scanDteBuffer: scanDteBuffer ? parseInt(scanDteBuffer.value) : 5,
+        scanDteBuffer: scanDteBuffer ? parseInt(scanDteBuffer.value) : 12,
         // Iron Condor values
         scanIcDeltaMin: scanIcDeltaMin ? parseFloat(scanIcDeltaMin.value) : 0.15,
         scanIcDeltaMax: scanIcDeltaMax ? parseFloat(scanIcDeltaMax.value) : 0.20,
@@ -1438,7 +1453,7 @@ export default function Scanner() {
                           />
                         </div>
                         <FormDescription className="mt-2">
-                          Target 45 DTE ±5 days (40-50 DTE range)
+                          Target 45 DTE ±12 days (33-57 DTE range). Trades found outside the preferred ±7 inner band (38-52 DTE) are flagged with 📍 so you know they're opportunistic catches rather than at-target spreads.
                         </FormDescription>
                       </div>
 
@@ -2638,12 +2653,25 @@ export default function Scanner() {
                               <strong className="text-foreground">Technical Setup:</strong> {result.signal || "Entry conditions met"}
                             </span>
                           </div>
-                          <div className="flex items-start gap-2 text-sm">
-                            <CheckCircle size={16} className="text-green-600 dark:text-green-400 mt-0.5 flex-shrink-0" />
-                            <span className="text-muted-foreground">
-                              <strong className="text-foreground">Ideal DTE Window:</strong> {result.dte} days provides optimal time decay
-                            </span>
-                          </div>
+                          {(() => {
+                            const dte = result.dte ?? 0;
+                            const inIdealWindow = dte >= 38 && dte <= 52;
+                            return (
+                              <div className="flex items-start gap-2 text-sm">
+                                {inIdealWindow ? (
+                                  <CheckCircle size={16} className="text-green-600 dark:text-green-400 mt-0.5 flex-shrink-0" />
+                                ) : (
+                                  <span className="text-amber-600 dark:text-amber-400 mt-0.5 flex-shrink-0" aria-hidden>📍</span>
+                                )}
+                                <span className="text-muted-foreground">
+                                  <strong className="text-foreground">DTE:</strong>{" "}
+                                  {inIdealWindow
+                                    ? `${dte} days — within ideal 45 DTE window (38-52) for balanced theta decay`
+                                    : `${dte} days — outside the ideal 45 DTE window (38-52); ${dte < 38 ? "shorter-dated than target (faster theta, less buffer)" : "longer-dated than target (slower theta, more capital tied up)"}`}
+                                </span>
+                              </div>
+                            );
+                          })()}
                           <div className="flex items-start gap-2 text-sm">
                             <CheckCircle size={16} className="text-green-600 dark:text-green-400 mt-0.5 flex-shrink-0" />
                             <span className="text-muted-foreground">

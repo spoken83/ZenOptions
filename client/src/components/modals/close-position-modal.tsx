@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, invalidateAfterPositionChange } from "@/lib/queryClient";
 import type { Position } from "@shared/schema";
 import { AuthModal } from "@/components/auth/AuthModal";
 
@@ -58,12 +58,7 @@ export default function ClosePositionModal({ open, onOpenChange, position, curre
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/positions"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/positions?status=open"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/positions?status=closed"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/stats"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/positions/pnl"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/positions/ticker-prices"] });
+      invalidateAfterPositionChange();
       toast({
         title: "Position Closed",
         description: "Position has been closed successfully",

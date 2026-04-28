@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, invalidateAfterPositionChange } from "@/lib/queryClient";
 import { format } from "date-fns";
 import type { Portfolio, Position } from "@shared/schema";
 import { AuthModal } from "@/components/auth/AuthModal";
@@ -117,10 +117,7 @@ export default function AddCoveredCallModal({ open, onOpenChange }: AddCoveredCa
       return res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/positions"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/positions?status=open"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/positions/pnl"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/portfolios"] });
+      invalidateAfterPositionChange();
       toast({
         title: "Covered Call Added",
         description: `Covered call linked to ${selectedLeaps?.symbol} ${selectedLeaps?.strategyType === 'STOCK' ? 'Stock' : 'LEAPS'}`,
