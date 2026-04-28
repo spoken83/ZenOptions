@@ -1,0 +1,14 @@
+providers = ["node", "python"]
+
+[phases.setup]
+nixPkgs = ["nodejs_20", "python311", "python311Packages.pip"]
+
+[phases.install]
+cmds = [
+  "npm ci",
+  "python3 -m venv /opt/venv",
+  ". /opt/venv/bin/activate && pip install -r requirements.txt",
+]
+
+[phases.build]
+cmds = ["npm run build"]
